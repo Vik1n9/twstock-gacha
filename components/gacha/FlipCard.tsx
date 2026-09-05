@@ -258,7 +258,11 @@ export function FlipCard({
             className="absolute inset-0"
             style={{ backfaceVisibility: "hidden", transform: "rotateY(180deg)" }}
           >
-            <StockCardFace card={card} boardName={boardName} compact={size < 170} />
+            <StockCardFace
+              card={card}
+              boardName={boardName}
+              variant={size < 132 ? "mini" : size < 200 ? "compact" : "full"}
+            />
             {/* 跟隨指標的鏡面反光 */}
             <div
               className="pointer-events-none absolute inset-0 rounded-[14px] mix-blend-screen"
