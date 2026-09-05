@@ -13,6 +13,7 @@
     "seed": "tsx scripts/seed.ts",
     "seed:dry": "tsx scripts/seed.ts --dry-run",
     "backfill": "tsx scripts/backfill.ts --days 60",
+    "snapshot": "tsx scripts/snapshot.ts",
     "test": "vitest run"
   },
   "dependencies": {
