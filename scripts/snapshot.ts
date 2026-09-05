@@ -11,7 +11,7 @@ async function main() {
   const { client } = await import("../lib/db/client");
 
   const dateIdx = process.argv.indexOf("--date");
-  let date =
+  const date =
     dateIdx !== -1 ? process.argv[dateIdx + 1] : await latestTradingDate();
   if (!date) throw new Error("無可用交易日資料，請先執行 backfill");
 

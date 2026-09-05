@@ -1,26 +1,96 @@
 @import "tailwindcss";
 
 :root {
-  --background: #ffffff;
-  --foreground: #171717;
+  --bg: #0b0e13;
+  --panel: #12161f;
+  --panel-2: #171c28;
+  --line: #232a38;
+  --ink: #e8ecf4;
+  --ink-dim: #8b94a7;
+  --up: #ff5252; /* 台股慣例：紅漲 */
+  --down: #26a69a; /* 綠跌 */
+  --gold: #f5c044;
 }
 
-@theme inline {
-  --color-background: var(--background);
-  --color-foreground: var(--foreground);
-  --font-sans: var(--font-geist-sans);
-  --font-mono: var(--font-geist-mono);
+html,
+body {
+  background: var(--bg);
+  color: var(--ink);
+  font-family:
+    ui-sans-serif, system-ui, -apple-system, "Noto Sans TC", "PingFang TC",
+    "Microsoft JhengHei", sans-serif;
 }
 
-@media (prefers-color-scheme: dark) {
-  :root {
-    --background: #0a0a0a;
-    --foreground: #ededed;
+.panel {
+  background: var(--panel);
+  border: 1px solid var(--cardline, var(--line));
+  border-radius: 14px;
+}
+
+.dim {
+  color: var(--ink-dim);
+}
+
+/* 稀有度邊框 */
+.rar-C {
+  --rar: #7f8ba0;
+  --cardline: #3a4356;
+}
+.rar-R {
+  --rar: #4f8bff;
+  --cardline: #2c4a86;
+}
+.rar-SR {
+  --rar: #b06bff;
+  --cardline: #5b3a86;
+}
+.rar-SSR {
+  --rar: var(--gold);
+  --cardline: #8a6a1f;
+}
+
+.card-face {
+  background:
+    radial-gradient(
+      120% 90% at 50% 0%,
+      color-mix(in srgb, var(--rar) 16%, transparent),
+      transparent 60%
+    ),
+    linear-gradient(160deg, var(--panel-2), #0d1018);
+  border: 1px solid var(--cardline);
+  border-radius: 14px;
+}
+
+.card-ssr::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  border-radius: 14px;
+  background: linear-gradient(
+    115deg,
+    transparent 30%,
+    color-mix(in srgb, var(--gold) 22%, transparent) 46%,
+    transparent 60%
+  );
+  background-size: 300% 100%;
+  animation: ssr-sheen 2.8s ease-in-out infinite;
+  pointer-events: none;
+}
+
+@keyframes ssr-sheen {
+  0%,
+  100% {
+    background-position: 220% 0;
+  }
+  50% {
+    background-position: -20% 0;
   }
 }
 
-body {
-  background: var(--background);
-  color: var(--foreground);
-  font-family: Arial, Helvetica, sans-serif;
+@media (prefers-reduced-motion: reduce) {
+  .card-ssr::after {
+    animation: none;
+  }
 }
+
+/* 稀有度邊框 */

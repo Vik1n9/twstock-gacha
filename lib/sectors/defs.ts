@@ -23,7 +23,7 @@ export interface BoardDef {
   theme: SectorTheme;
 }
 
-const placeholder: SectorTheme = {
+export const placeholder: SectorTheme = {
   primary: "#888888",
   accent: "#CCCCCC",
   bg: "#0D0D0F",

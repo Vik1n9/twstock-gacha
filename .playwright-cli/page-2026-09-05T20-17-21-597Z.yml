@@ -1,0 +1,51 @@
+- generic [active] [ref=e1]:
+  - banner [ref=e2]:
+    - navigation [ref=e3]:
+      - link "台股抽卡所" [ref=e4] [cursor=pointer]:
+        - /url: /
+      - generic [ref=e5]:
+        - link "抽卡" [ref=e6] [cursor=pointer]:
+          - /url: /
+        - link "卡池" [ref=e7] [cursor=pointer]:
+          - /url: /pools
+        - link "機率說明" [ref=e8] [cursor=pointer]:
+          - /url: /odds
+      - button "特效：完整" [ref=e9]
+  - main [ref=e10]:
+    - generic [ref=e11]:
+      - generic [ref=e13]:
+        - generic [ref=e14]:
+          - generic [ref=e15]: 每日板塊
+          - generic [ref=e16]: 半導體 板塊
+          - generic [ref=e17]: 晶圓代工、IC 設計、封測、半導體設備、半導體材料
+        - generic [ref=e18]:
+          - generic [ref=e19]:
+            - generic [ref=e20]: 板塊昨日強度
+            - generic [ref=e21]: +1.11%
+          - generic [ref=e22]:
+            - generic [ref=e23]: 板塊 30 日強度
+            - generic [ref=e24]: +0.03%
+          - generic [ref=e25]:
+            - generic [ref=e26]: 可抽股票
+            - generic [ref=e27]: "96"
+      - generic [ref=e28]:
+        - button "關閉 ✕" [ref=e50]
+        - generic [ref=e31]:
+          - generic [ref=e51]: ▤
+          - text: 半導體
+        - generic [ref=e52]:
+          - generic [ref=e54]: 2330 · 2303 · 2454 · 3034 · 2308 · 2408 · 6770 · 3711 · 6509 · 8081 · 2330 · 2303 · 2454 · 3034 · 2308 · 2408 · 6770 · 3711 · 6509 · 8081 ·
+          - generic [ref=e55]:
+            - generic [ref=e57]: ▤
+            - generic [ref=e58]: 半導體
+            - generic [ref=e59]: 正在進入板塊卡池…
+      - generic [ref=e35]:
+        - text: 稀有度由個股近 30 個交易日漲跌幅決定（企劃書 1.2） |
+        - link "卡池列表" [ref=e36] [cursor=pointer]:
+          - /url: /pools
+        - text: "|"
+        - link "機率說明" [ref=e37] [cursor=pointer]:
+          - /url: /odds
+  - button "Open Next.js Dev Tools" [ref=e43] [cursor=pointer]:
+    - img [ref=e44]
+  - alert [ref=e47]
