@@ -25,6 +25,9 @@ export default function RootLayout({
               <Link href="/" className="dim hover:text-[var(--ink)]">
                 抽卡
               </Link>
+              <Link href="/history" className="dim hover:text-[var(--ink)]">
+                紀錄
+              </Link>
               <Link href="/pools" className="dim hover:text-[var(--ink)]">
                 卡池
               </Link>

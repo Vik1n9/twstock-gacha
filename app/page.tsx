@@ -57,6 +57,10 @@ export default async function Home() {
 
       <div className="dim text-center text-xs">
         稀有度由個股近 30 個交易日漲跌幅決定（企劃書 1.2）　|　
+        <Link href="/history" className="underline hover:text-[var(--ink)]">
+          抽卡紀錄
+        </Link>
+        　|　
         <Link href="/pools" className="underline hover:text-[var(--ink)]">
           卡池列表
         </Link>

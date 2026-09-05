@@ -70,7 +70,7 @@ body {
 .card-face {
   position: relative;
   border-radius: 14px;
-  border: 1.5px solid var(--card-line);
+  border: 2px solid var(--card-line);
   color: var(--card-ink);
 }
 
@@ -84,6 +84,7 @@ body {
   --card-ink: #0f131b;
   --card-dim: #5f6a7d;
   --card-line: var(--rar-ink);
+  --frame-inner: rgba(255, 255, 255, 0.85);
   --up-c: #c62828;
   --down-c: #0f766e;
   background:
@@ -105,7 +106,8 @@ body {
   --rar-use: var(--rar);
   --card-ink: #e8ecf4;
   --card-dim: #7d879a;
-  --card-line: #05070b;
+  --card-line: color-mix(in srgb, var(--rar) 80%, #000);
+  --frame-inner: rgba(0, 0, 0, 0.92);
   --up-c: #ff5252;
   --down-c: #26a69a;
   background:
@@ -120,6 +122,41 @@ body {
     inset 0 0 40px rgba(0, 0, 0, 0.9),
     0 10px 26px rgba(0, 0, 0, 0.7),
     0 0 16px color-mix(in srgb, var(--rar) 30%, transparent);
+}
+
+/* 稀有度邊框層：內襯線 + 高階稀有度的四角框飾 */
+.rar-frame {
+  border-radius: 12px;
+  box-shadow: inset 0 0 0 1px var(--frame-inner);
+}
+
+/* SR / SSR：四角加鍍色框飾，讓稀有度一眼可辨 */
+.rar-SR .rar-frame,
+.rar-SSR .rar-frame {
+  background:
+    linear-gradient(var(--rar-use), var(--rar-use)) left 4px top 4px / 24% 2px no-repeat,
+    linear-gradient(var(--rar-use), var(--rar-use)) left 4px top 4px / 2px 18% no-repeat,
+    linear-gradient(var(--rar-use), var(--rar-use)) right 4px top 4px / 24% 2px no-repeat,
+    linear-gradient(var(--rar-use), var(--rar-use)) right 4px top 4px / 2px 18% no-repeat,
+    linear-gradient(var(--rar-use), var(--rar-use)) left 4px bottom 4px / 24% 2px no-repeat,
+    linear-gradient(var(--rar-use), var(--rar-use)) left 4px bottom 4px / 2px 18% no-repeat,
+    linear-gradient(var(--rar-use), var(--rar-use)) right 4px bottom 4px / 24% 2px no-repeat,
+    linear-gradient(var(--rar-use), var(--rar-use)) right 4px bottom 4px / 2px 18% no-repeat;
+  opacity: 0.85;
+}
+
+/* 稀有度外環：階級越高，框越有份量 */
+.rar-R.card-face {
+  outline: 1px solid color-mix(in srgb, var(--rar) 26%, transparent);
+  outline-offset: 2px;
+}
+.rar-SR.card-face {
+  outline: 1.5px solid color-mix(in srgb, var(--rar) 45%, transparent);
+  outline-offset: 3px;
+}
+.rar-SSR.card-face {
+  outline: 2px solid color-mix(in srgb, var(--rar) 62%, transparent);
+  outline-offset: 4px;
 }
 
 /* 稀有度頂條 */
@@ -294,6 +331,26 @@ body {
   }
 }
 
+/* ── 卡片放大檢視 ── */
+/* 開啟演出（卡背翻面 + zoom in）由 CardDetail 內的 gsap timeline 控制 */
+
+/* 可點選的卡片：hover 微浮起 */
+.card-btn {
+  transition:
+    transform 0.18s ease,
+    filter 0.18s ease;
+}
+.card-btn:hover,
+.card-btn:focus-visible {
+  transform: translateY(-4px) scale(1.03);
+  filter: brightness(1.08);
+}
+.card-btn:focus-visible {
+  outline: 2px solid var(--ink);
+  outline-offset: 6px;
+  border-radius: 16px;
+}
+
 /* ── 演出用工具類 ── */
 .fx-3d {
   transform-style: preserve-3d;
@@ -361,5 +418,13 @@ body {
   .text-glitch::before,
   .text-glitch::after {
     animation: none;
+  }
+
+  .card-btn {
+    transition: none;
+  }
+  .card-btn:hover,
+  .card-btn:focus-visible {
+    transform: none;
   }
 }

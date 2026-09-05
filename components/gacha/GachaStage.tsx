@@ -9,6 +9,8 @@ import { WaferBurst } from "./WaferBurst";
 import { Resonance } from "./Resonance";
 import { RevealFx, type RevealFxHandle } from "./RevealFx";
 import { StockCardFace, fmtPct } from "@/components/cards/StockCard";
+import { CardDetail, type CardDetailData } from "@/components/cards/CardDetail";
+import { appendOutcome } from "@/lib/history/store";
 import { useLowFx } from "@/lib/hooks/useLowFx";
 import type { DrawOutcome, PoolInfo } from "@/lib/api/types";
 import type { SectorTheme } from "@/lib/sectors/defs";
@@ -44,6 +46,7 @@ export function GachaStage({ pools }: { pools: PoolInfo[] }) {
   const [busy, setBusy] = useState(false);
   const [boost, setBoost] = useState(0);
   const [hint, setHint] = useState<Rarity | null>(null);
+  const [detail, setDetail] = useState<CardDetailData | null>(null);
   const [low] = useLowFx();
 
   const stageRef = useRef<HTMLDivElement>(null);
@@ -94,6 +97,7 @@ export function GachaStage({ pools }: { pools: PoolInfo[] }) {
         return;
       }
       setOutcome(res.data);
+      appendOutcome(res.data, type);
       setPhase(skipRef.current ? "summary" : "reveal");
       setBoost(skipRef.current ? 0.12 : 0.34);
       setBusy(false);
@@ -104,6 +108,7 @@ export function GachaStage({ pools }: { pools: PoolInfo[] }) {
   const close = () => {
     setPhase("idle");
     setOutcome(null);
+    setDetail(null);
     setBoost(0);
     setHint(null);
     fxRef.current?.clear();
@@ -299,6 +304,7 @@ export function GachaStage({ pools }: { pools: PoolInfo[] }) {
                     {fmtPct(outcome.board30dStrength)}　|　漲 {up} / 跌 {down}
                     {ssrCount > 0 && `　|　SSR ×${ssrCount}`}
                   </div>
+                  <div className="dim mt-1 text-[11px]">點卡片看完整資料</div>
                 </div>
                 <div
                   className={`grid gap-3 ${
@@ -308,16 +314,28 @@ export function GachaStage({ pools }: { pools: PoolInfo[] }) {
                   }`}
                 >
                   {sorted.map((c, i) => (
-                    <div
+                    <button
                       key={`${c.stockCode}-${i}`}
-                      className={drawType === "single" ? "min-h-64" : "min-h-44"}
+                      type="button"
+                      aria-label={`查看 ${c.stockName} 詳情`}
+                      onClick={() =>
+                        setDetail({
+                          ...c,
+                          boardName: outcome.boardName,
+                          poolName: outcome.poolName,
+                          snapshotDate: outcome.snapshotDate,
+                        })
+                      }
+                      className={`card-btn block text-left ${
+                        drawType === "single" ? "min-h-64" : "min-h-44"
+                      }`}
                     >
                       <StockCardFace
                         card={c}
                         boardName={outcome.boardName}
-                        compact={drawType === "ten"}
+                        variant={drawType === "ten" ? "compact" : "full"}
                       />
-                    </div>
+                    </button>
                   ))}
                 </div>
                 <div className="mt-6 flex items-center justify-center gap-3">
@@ -348,6 +366,8 @@ export function GachaStage({ pools }: { pools: PoolInfo[] }) {
             </div>
           )}
         </div>
+
+        <CardDetail card={detail} onClose={() => setDetail(null)} />
       </div>
     </div>
   );

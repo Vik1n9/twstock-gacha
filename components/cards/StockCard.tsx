@@ -90,6 +90,8 @@ export function StockCardFace({
         card.rarity === "SSR" || card.rarity === "SR" ? "card-holo" : ""
       } ${s.pad}`}
     >
+      {/* 稀有度邊框層（內襯線＋高階四角框飾） */}
+      <div className="rar-frame pointer-events-none absolute inset-0" />
       {/* 稀有度頂條 */}
       <div className="rar-bar pointer-events-none absolute inset-x-0 top-0" />
       {/* 角落切光 */}
@@ -114,7 +116,9 @@ export function StockCardFace({
 
       <div className={`relative min-h-0 flex-1 ${s.nameGap}`}>
         <div
-          className={`truncate font-black tracking-wide ${s.name}`}
+          className={`font-black tracking-wide ${s.name} ${
+            full ? "break-words leading-tight" : "truncate"
+          }`}
           title={card.stockName}
         >
           {card.stockName}
