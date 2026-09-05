@@ -39,3 +39,8 @@ yarn-error.log*
 # typescript
 *.tsbuildinfo
 next-env.d.ts
+.neon
+
+# vercel link（機器本機）
+.vercel
+.playwright-cli/
