@@ -1,0 +1,16 @@
+name: twstock-gacha
+
+services:
+  db:
+    image: postgres:17-alpine
+    container_name: twstock-db
+    environment:
+      POSTGRES_PASSWORD: twstock
+      POSTGRES_DB: twstock
+    ports:
+      - "54329:5432"
+    volumes:
+      - twstock_pgdata:/var/lib/postgresql/data
+
+volumes:
+  twstock_pgdata:
