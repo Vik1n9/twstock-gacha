@@ -31,66 +31,286 @@ body {
   color: var(--ink-dim);
 }
 
-/* 稀有度邊框 */
+/* ─────────────────────────────────────────────
+   稀有度色階：C 白 → R 藍 → SR 紫 → SSR 橘
+   --rar   主色（文字、光暈、粒子）
+   --rar2  漸層第二色
+   --cardline 框線（DOWN 會被黑邊覆蓋）
+   ───────────────────────────────────────────── */
 .rar-C {
-  --rar: #7f8ba0;
-  --cardline: #3a4356;
+  --rar: #e6edf7;
+  --rar2: #9aa8bd;
+  --cardline: #4a5464;
+  --rar-glow: rgba(230, 237, 247, 0.35);
 }
 .rar-R {
-  --rar: #4f8bff;
-  --cardline: #2c4a86;
+  --rar: #4fa3ff;
+  --rar2: #2f6ede;
+  --cardline: #2b5f9e;
+  --rar-glow: rgba(79, 163, 255, 0.5);
 }
 .rar-SR {
-  --rar: #b06bff;
-  --cardline: #5b3a86;
+  --rar: #b26bff;
+  --rar2: #7b3fd8;
+  --cardline: #6b3fa8;
+  --rar-glow: rgba(178, 107, 255, 0.6);
 }
 .rar-SSR {
-  --rar: var(--gold);
-  --cardline: #8a6a1f;
+  --rar: #ff8a2b;
+  --rar2: #ffd166;
+  --cardline: #a85416;
+  --rar-glow: rgba(255, 138, 43, 0.75);
 }
 
 .card-face {
+  position: relative;
   background:
     radial-gradient(
-      120% 90% at 50% 0%,
-      color-mix(in srgb, var(--rar) 16%, transparent),
-      transparent 60%
+      130% 95% at 50% -10%,
+      color-mix(in srgb, var(--rar) 22%, transparent),
+      transparent 62%
     ),
-    linear-gradient(160deg, var(--panel-2), #0d1018);
-  border: 1px solid var(--cardline);
+    linear-gradient(160deg, var(--panel-2), #0b0e15 78%);
+  border: 1.5px solid var(--cardline);
   border-radius: 14px;
+  box-shadow:
+    inset 0 1px 0 color-mix(in srgb, var(--rar) 40%, transparent),
+    inset 0 0 26px color-mix(in srgb, var(--rar) 10%, transparent),
+    0 10px 26px rgba(0, 0, 0, 0.55),
+    0 0 18px var(--rar-glow);
 }
 
-.card-ssr::after {
+/* 稀有度頂條 */
+.rar-bar {
+  height: 3px;
+  border-radius: 14px 14px 0 0;
+  background: linear-gradient(90deg, transparent, var(--rar), var(--rar2), var(--rar), transparent);
+  opacity: 0.95;
+}
+
+/* 右上角切光 */
+.rar-corner {
+  width: 42px;
+  height: 42px;
+  background: linear-gradient(225deg, color-mix(in srgb, var(--rar) 55%, transparent), transparent 62%);
+  border-top-right-radius: 14px;
+}
+
+/* 稀有度徽章 */
+.rar-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 2px 8px 2px 6px;
+  border-radius: 999px;
+  font-size: 10px;
+  font-weight: 900;
+  letter-spacing: 0.18em;
+  color: var(--rar);
+  border: 1px solid color-mix(in srgb, var(--rar) 55%, transparent);
+  background: color-mix(in srgb, var(--rar) 14%, transparent);
+  text-shadow: 0 0 10px var(--rar-glow);
+}
+
+.rar-gem {
+  width: 7px;
+  height: 7px;
+  transform: rotate(45deg);
+  background: linear-gradient(135deg, var(--rar2), var(--rar));
+  box-shadow: 0 0 8px var(--rar-glow);
+}
+
+/* 跌卡：黑邊暗卡（稀有度色只留在字與光暈上） */
+.card-face.dir-DOWN {
+  --cardline: #05070b;
+  border-color: #05070b;
+  background:
+    radial-gradient(
+      130% 95% at 50% -10%,
+      color-mix(in srgb, var(--rar) 12%, transparent),
+      transparent 58%
+    ),
+    linear-gradient(160deg, #0e1219, #05070b 80%);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.06),
+    inset 0 0 34px rgba(0, 0, 0, 0.85),
+    0 10px 26px rgba(0, 0, 0, 0.7),
+    0 0 12px color-mix(in srgb, var(--rar) 22%, transparent);
+}
+
+.card-face.dir-DOWN .rar-bar {
+  background: linear-gradient(
+    90deg,
+    transparent,
+    color-mix(in srgb, var(--rar) 65%, #000),
+    #000,
+    color-mix(in srgb, var(--rar) 65%, #000),
+    transparent
+  );
+}
+
+.card-face.dir-DOWN .rar-corner {
+  background: linear-gradient(225deg, rgba(0, 0, 0, 0.85), transparent 60%);
+}
+
+/* 全息斜掃（SR / SSR 卡面） */
+.card-holo::after {
   content: "";
   position: absolute;
   inset: 0;
-  border-radius: 14px;
+  border-radius: 13px;
   background: linear-gradient(
     115deg,
-    transparent 30%,
-    color-mix(in srgb, var(--gold) 22%, transparent) 46%,
-    transparent 60%
+    transparent 28%,
+    color-mix(in srgb, var(--rar) 26%, transparent) 44%,
+    rgba(255, 255, 255, 0.3) 50%,
+    color-mix(in srgb, var(--rar2) 26%, transparent) 56%,
+    transparent 72%
   );
-  background-size: 300% 100%;
-  animation: ssr-sheen 2.8s ease-in-out infinite;
+  background-size: 320% 100%;
+  animation: holo-sheen 3.2s ease-in-out infinite;
+  mix-blend-mode: screen;
   pointer-events: none;
 }
 
-@keyframes ssr-sheen {
+.rar-SSR.card-holo::before {
+  content: "";
+  position: absolute;
+  inset: -1.5px;
+  border-radius: 15px;
+  padding: 1.5px;
+  background: conic-gradient(
+    from 0deg,
+    #ff8a2b,
+    #ffd166,
+    #fff3c4,
+    #ff6a00,
+    #ffd166,
+    #ff8a2b
+  );
+  -webkit-mask:
+    linear-gradient(#000 0 0) content-box,
+    linear-gradient(#000 0 0);
+  -webkit-mask-composite: xor;
+  mask-composite: exclude;
+  animation: rar-rotate 4s linear infinite;
+  pointer-events: none;
+}
+
+@keyframes holo-sheen {
   0%,
   100% {
-    background-position: 220% 0;
+    background-position: 240% 0;
   }
   50% {
-    background-position: -20% 0;
+    background-position: -40% 0;
   }
+}
+
+@keyframes rar-rotate {
+  to {
+    transform: rotate(1turn);
+  }
+}
+
+/* ── 卡背 ── */
+.card-back-holo {
+  background: linear-gradient(
+    118deg,
+    transparent 30%,
+    color-mix(in srgb, var(--cb-accent) 34%, transparent) 46%,
+    rgba(255, 255, 255, 0.24) 50%,
+    color-mix(in srgb, var(--cb-primary) 34%, transparent) 55%,
+    transparent 70%
+  );
+  background-size: 320% 100%;
+  animation: holo-sheen 3.4s ease-in-out infinite;
+  mix-blend-mode: screen;
+  pointer-events: none;
+}
+
+.card-back-sigil {
+  animation: sigil-pulse 2.2s ease-in-out infinite;
+}
+
+@keyframes sigil-pulse {
+  0%,
+  100% {
+    filter: brightness(1);
+    transform: scale(1);
+  }
+  50% {
+    filter: brightness(1.55);
+    transform: scale(1.06);
+  }
+}
+
+/* ── 演出用工具類 ── */
+.fx-3d {
+  transform-style: preserve-3d;
+}
+
+.text-glitch {
+  position: relative;
+}
+.text-glitch::before,
+.text-glitch::after {
+  content: attr(data-text);
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+}
+.text-glitch::before {
+  color: #ff3b3b;
+  transform: translate(-2px, 0);
+  mix-blend-mode: screen;
+  animation: glitch-x 2.4s steps(2, end) infinite;
+}
+.text-glitch::after {
+  color: #22d3ee;
+  transform: translate(2px, 0);
+  mix-blend-mode: screen;
+  animation: glitch-x 3.1s steps(2, end) infinite reverse;
+}
+
+@keyframes glitch-x {
+  0%,
+  92%,
+  100% {
+    transform: translate(0, 0);
+    opacity: 0.55;
+  }
+  93% {
+    transform: translate(-4px, 1px);
+    opacity: 0.9;
+  }
+  96% {
+    transform: translate(4px, -1px);
+    opacity: 0.9;
+  }
+}
+
+.scanlines::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background: repeating-linear-gradient(
+    to bottom,
+    rgba(255, 255, 255, 0.05) 0px,
+    rgba(255, 255, 255, 0.05) 1px,
+    transparent 1px,
+    transparent 3px
+  );
+  pointer-events: none;
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .card-ssr::after {
+  .card-holo::after,
+  .rar-SSR.card-holo::before,
+  .card-back-holo,
+  .card-back-sigil,
+  .text-glitch::before,
+  .text-glitch::after {
     animation: none;
   }
 }
-
-/* 稀有度邊框 */
