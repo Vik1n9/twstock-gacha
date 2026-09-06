@@ -17,20 +17,30 @@
 
 ---
 
-## 1. 部署自動化 — 接上 Workers Builds（**唯一剩餘項目**）
+## 1. 部署自動化 — Workers Builds 的 production branch 改為 `main`（**唯一剩餘項目**）
 
-**現況**：目前沒有任何 Git 整合在運作。證據：`6506e45`、`cdd5aff` 兩個 commit
-推上 `main` 之後，線上 `x-vinext-build-id` 仍是 `d0fca2ea` 沒有變動，
-代表**推送到 `main` 不會觸發部署**，需手動 `npm run deploy`。
+**Git 整合是存在且運作中的**，只是它的 production branch 不是 `main`。
 
-> 補充：PR #8～#11 期間 `cloudflare-workers-and-pages[bot]` 曾在每個 PR 貼出
-> 建置結果與 Commit／Branch Preview URL，那是 Workers Builds 的行為。
-> 推測整合曾經存在、綁在已刪除的 `cloudflare-d1` 上，或事後被移除。
-> 無論何者，現在都要重新接。
+證據：
 
-### Dashboard 設定（指令皆已實測）
+| 觀察 | 結果 |
+|---|---|
+| PR 分支推送 | Cloudflare 每次都建置成功並產生 Preview URL（例：`b3490aef` → build id `3ae50148`，頁面與抽卡皆 200） |
+| 推 `6506e45`、`cdd5aff` 到 `main` | 線上 `x-vinext-build-id` 仍是 `d0fca2ea` **未變動** |
 
-Workers & Pages → `twstock-gacha` → Settings → Builds → Connect repository：
+即：**預覽建置正常，但推 `main` 不會更新 production**。合理推斷 production branch
+仍指向已刪除的 `cloudflare-d1`。
+
+> 註：Cloudflare 的建置結果是以 **PR comment** 呈現，不是 commit status，
+> 所以用 `commits/<sha>/status` 查會是空的——先前一度據此誤判為「沒有 Git 整合」。
+
+**要做的事**：Workers & Pages → `twstock-gacha` → Settings → Builds，
+把 **production branch 改為 `main`**。
+
+由於預覽建置一直成功，**目前設定裡的 install／build／deploy 指令是有效的，不需要更動**。
+下表僅供核對或重新輸入時參考。
+
+### 指令對照表（已實測，僅供核對）
 
 | 設定 | 值 |
 |---|---|
@@ -74,9 +84,9 @@ vinext 的 worker entry 依賴 Vite 虛擬模組（`virtual:vinext-worker-entry`
 直接對 root `wrangler.jsonc` 部署會無法解析。必須先建置，再以建置產生的
 `dist/server/wrangler.json` 部署——上表的 Deploy command 已經是這個形式。
 
-### 接上後如何驗證
+### 改完如何驗證
 
-推一個 commit 到 `main`，確認 Dashboard 觸發建置，且線上 build id 改變：
+推一個 commit 到 `main`，確認線上 build id 從 `d0fca2ea` 變成別的值：
 
 ```bash
 curl -sI https://twstock-gacha.twstock-gacha.workers.dev/ | grep -i x-vinext-build-id
