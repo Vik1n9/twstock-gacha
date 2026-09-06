@@ -1,10 +1,12 @@
 import { NextResponse } from "next/server";
+import { revalidateTag } from "next/cache";
 import { findLastTradingDay } from "@/lib/ingest/twse";
 import { storeDailyCloses } from "@/lib/ingest/store";
 import {
   generatePoolSnapshots,
   latestTradingDate,
 } from "@/lib/pool/generate";
+import { POOLS_CACHE_TAG } from "@/lib/pool/query";
 
 export const dynamic = "force-dynamic";
 export const maxDuration = 60;
@@ -36,6 +38,10 @@ export async function GET(request: Request) {
     }
 
     const summaries = await generatePoolSnapshots(snapshotDate);
+    // 新快照生成後立即失效卡池快取，前台不必等 TTL 到期。
+    // profile "max"＝stale-while-revalidate：讀取端永遠不會為了重算而卡住。
+    revalidateTag(POOLS_CACHE_TAG, "max");
+
     return NextResponse.json({
       ingestedDate: date,
       stored,

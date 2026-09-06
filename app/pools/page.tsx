@@ -1,12 +1,12 @@
 import Link from "next/link";
-import { getActivePools } from "@/lib/pool/query";
+import { getActivePoolsWithRarity } from "@/lib/pool/query";
 import { fmtPct } from "@/components/cards/StockCard";
 
 export const dynamic = "force-dynamic";
 
 // 企劃書 12.2 卡池頁（板塊行情牆）；12.3 篩選器 beta 隨多池開放
 export default async function PoolsPage() {
-  const pools = await getActivePools();
+  const pools = await getActivePoolsWithRarity();
 
   return (
     <div className="flex flex-col gap-4">

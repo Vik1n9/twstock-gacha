@@ -80,6 +80,19 @@ npx tsx scripts/verify-odds.ts [-- --pool POOL_AI]  # 對真實快照模擬 30 �
 | `POST /api/draw` | `{poolId, drawType: single\|ten}` 抽卡 |
 | `GET /api/cron/snapshot` | Bearer `CRON_SECRET`；抓收盤＋生成快照（冪等） |
 
+## 資料載入分層
+
+前台不會在開啟網頁時就把所有資料撈進來，而是分三段：
+
+| 階段 | 觸發時機 | 載入內容 | DB 查詢數 |
+|---|---|---:|---:|
+| 1 | 開啟首頁 `/` | 卡池清單＋各池最新快照摘要（`getActivePools`） | 3 |
+| 2 | 進 `/pools`、`/odds`、`/api/pools` | 再加上各池方向×稀有度張數（`getActivePoolsWithRarity`） | 4 |
+| 3 | 按下單抽／十連 | 該池當日可抽個股明細（`POST /api/draw`） | 5～6 |
+
+卡池資料每個交易日只在 cron 快照後變動一次，故 1、2 以 `unstable_cache`
+（tag `pools`）快取；`/api/cron/snapshot` 生成新快照後會 `revalidateTag` 失效。
+
 ## 已知限制（beta）
 
 - 漲跌幅使用**原始收盤價**：個股除權息日會被視為下跌（後續可改用還原股價，FinMind `TaiwanStockPriceAdj`）。
