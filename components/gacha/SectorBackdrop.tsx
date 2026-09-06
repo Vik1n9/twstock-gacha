@@ -2,17 +2,23 @@
 
 import { useEffect, useRef } from "react";
 import type { SectorTheme } from "@/lib/sectors/defs";
-import { Camera, damp, fitCanvas, mulberry32, rgba } from "@/lib/fx/core";
+import { Camera, damp, fitCanvas, hexRgb, mulberry32, rgba, rgbHex } from "@/lib/fx/core";
+import { fxProfile, startFrameLoop } from "@/lib/fx/quality";
 
 // 板塊主題背景（3D 深度場）
 // 圖層：星雲 → 透視電路隧道 → 深度晶片粒子 → 神光束 → 輝光 bloom → 顆粒噪點
 // boost 0..1 由抽卡階段驅動：拉高速度、拉長速度線、加強光束（十連/SSR 時再往上推）
+//
+// 這一層是唯一「從抽卡開始到玩家關閉為止都在畫」的全螢幕特效，發熱量主要來自它。
+// 三道節流：解析度跟著裝置檔次（fxProfile）、張數由 startFrameLoop 設上限、
+// idle（結果頁停留）時再降一階並關掉 bloom／噪點這兩個全螢幕合成步驟。
 export function SectorBackdrop({
   theme,
   low = false,
   intensity = 1,
   boost = 0,
   hue = null,
+  idle = false,
 }: {
   theme: SectorTheme;
   low?: boolean;
@@ -20,16 +26,20 @@ export function SectorBackdrop({
   boost?: number;
   /** 覆蓋強調色（例如 SSR 預告轉金色） */
   hue?: string | null;
+  /** 演出已結束、玩家正在看結果：背景只要活著，不需要全速 */
+  idle?: boolean;
 }) {
   const ref = useRef<HTMLCanvasElement>(null);
   const boostRef = useRef(0);
   const targetRef = useRef(boost);
   const hueRef = useRef<string | null>(hue);
+  const idleRef = useRef(idle);
 
   useEffect(() => {
     targetRef.current = boost;
     hueRef.current = hue;
-  }, [boost, hue]);
+    idleRef.current = idle;
+  }, [boost, hue, idle]);
 
   useEffect(() => {
     const canvas = ref.current;
@@ -37,18 +47,29 @@ export function SectorBackdrop({
 
     const cam = new Camera();
     const rnd = mulberry32(20260906);
+    const profile = fxProfile();
+
+    // 可下修的品質旋鈕：startFrameLoop 量到繪製持續超支時，
+    // 依「最貴的先關」順序單向降級（不會再升回去，避免在臨界點來回抖動）。
+    const q = {
+      bloom: profile.bloom,
+      grain: profile.grain,
+      godRays: profile.godRays,
+      chipRatio: 1,
+      fpsScale: 1,
+    };
 
     let w = 0;
     let h = 0;
     let ctx: CanvasRenderingContext2D | null = null;
     let disposed = false;
-    let raf = 0;
 
     // 輝光用的低解析離屏 canvas（1/4 解析度模糊後疊加，成本低效果好）
     const glowCanvas = document.createElement("canvas");
     const glowCtx = glowCanvas.getContext("2d");
 
     // 顆粒噪點貼圖（預先產生一次，之後只做位移）
+    let grainPattern: CanvasPattern | null = null;
     const grain = document.createElement("canvas");
     grain.width = 128;
     grain.height = 128;
@@ -114,8 +135,16 @@ export function SectorBackdrop({
       glowCanvas.height = Math.max(1, Math.round(h / 4));
 
       const area = w * h;
-      const count = Math.round(clampNum(area / 5200, 90, 340) * intensity);
+      const count = Math.round(
+        clampNum(area / 5200, 90, 340) *
+          intensity *
+          profile.particleScale *
+          q.chipRatio,
+      );
       chips = Array.from({ length: count }, () => spawnChip());
+
+      // pattern 綁在 context 上，重建 context 後要重新產生（每幀建一次是白工）
+      grainPattern = ctx.createPattern(grain, "repeat");
 
       nebulas = [
         { x: 0.24, y: 0.28, r: 0.62, phase: 0, speed: 0.11, color: theme.primary },
@@ -132,8 +161,20 @@ export function SectorBackdrop({
       pointer.ty = (e.clientY / window.innerHeight - 0.5) * 2;
     };
 
+    // 強調色不硬切：每幀往目標色逼近，跳變卡在卡背轉向時的「低階色 → 結果色」
+    // 因此是一段約 0.3 秒的過場，而不是背景瞬間換一個顏色。
+    const accentRgb = hexRgb(hueRef.current ?? theme.accent);
+    let accentHex = rgbHex(accentRgb);
+    function stepAccent(dt: number) {
+      const target = hexRgb(hueRef.current ?? theme.accent);
+      accentRgb.r = damp(accentRgb.r, target.r, 11, dt);
+      accentRgb.g = damp(accentRgb.g, target.g, 11, dt);
+      accentRgb.b = damp(accentRgb.b, target.b, 11, dt);
+      accentHex = rgbHex(accentRgb);
+    }
+
     function accentColor(): string {
-      return hueRef.current ?? theme.accent;
+      return accentHex;
     }
 
     // ── 星雲底層：緩慢呼吸的大面積徑向漸層
@@ -262,8 +303,9 @@ export function SectorBackdrop({
     function drawGodRays(t: number, b: number) {
       const c = ctx!;
       const accent = accentColor();
+      const rays = q.godRays;
+      if (rays <= 0) return;
       c.globalCompositeOperation = "lighter";
-      const rays = 5;
       for (let i = 0; i < rays; i++) {
         const sway = Math.sin(t * 0.35 + i * 1.7) * 0.5 + 0.5;
         const x = (i + 0.5) / rays * w + Math.sin(t * 0.2 + i) * w * 0.06;
@@ -286,52 +328,54 @@ export function SectorBackdrop({
     }
 
     // ── 輝光：整幀縮到 1/4 → 模糊 → 以 lighter 疊回，得到廉價但漂亮的 bloom
-    function drawBloom(b: number) {
+    //
+    // 模糊在「1/4 解析度的離屏 canvas」上做，不是疊回主畫布時才做：
+    // canvas filter 的成本算在目的地像素上，半徑同樣視覺效果下差約 16 倍工作量。
+    // 放大貼回時的雙線性內插又順手多給一層柔化，所以半徑改成 1/4。
+    function drawBloom(b: number, mix: number) {
       if (!glowCtx) return;
       const gw = glowCanvas.width;
       const gh = glowCanvas.height;
-      glowCtx.clearRect(0, 0, gw, gh);
-      glowCtx.drawImage(canvas!, 0, 0, gw, gh);
       glowCtx.globalCompositeOperation = "source-over";
+      glowCtx.clearRect(0, 0, gw, gh);
+      glowCtx.filter = `blur(${2 + b * 2}px)`;
+      glowCtx.drawImage(canvas!, 0, 0, gw, gh);
+      glowCtx.filter = "none";
       const c = ctx!;
       c.save();
       c.globalCompositeOperation = "lighter";
-      c.globalAlpha = 0.42 + b * 0.3;
-      c.filter = `blur(${8 + b * 8}px)`;
+      c.globalAlpha = (0.42 + b * 0.3) * mix;
       c.drawImage(glowCanvas, 0, 0, w, h);
-      c.filter = "none";
       c.restore();
     }
 
-    function drawGrain(t: number) {
+    function drawGrain(t: number, mix: number) {
+      if (!grainPattern) return;
       const c = ctx!;
       c.save();
-      c.globalAlpha = 0.045;
+      c.globalAlpha = 0.045 * mix;
       c.globalCompositeOperation = "overlay";
       const ox = -(Math.floor(t * 37) % 128);
       const oy = -(Math.floor(t * 53) % 128);
-      const pat = c.createPattern(grain, "repeat");
-      if (pat) {
-        c.translate(ox, oy);
-        c.fillStyle = pat;
-        c.fillRect(0, 0, w + 128, h + 128);
-      }
+      c.translate(ox, oy);
+      c.fillStyle = grainPattern;
+      c.fillRect(0, 0, w + 128, h + 128);
       c.restore();
     }
 
     ctx = build();
 
     let scroll = 0;
-    let last = performance.now();
+    // 進出「結果頁停留」時 bloom／噪點淡入淡出，避免背景亮度瞬間跳一階
+    let heavyMix = 1;
 
-    function frame(now: number) {
+    function frame(now: number, dt: number) {
       if (disposed || !ctx) return;
-      const dt = Math.min((now - last) / 1000, 0.05);
-      last = now;
       const t = now / 1000;
 
       boostRef.current = damp(boostRef.current, targetRef.current, 4.5, dt);
       const b = boostRef.current;
+      stepAccent(dt);
 
       pointer.x = damp(pointer.x, pointer.tx, 3, dt);
       pointer.y = damp(pointer.y, pointer.ty, 3, dt);
@@ -345,16 +389,17 @@ export function SectorBackdrop({
       drawTunnel(t, b, scroll);
       drawChips(t, b, dt);
       drawGodRays(t, b);
-      drawBloom(b);
-      drawGrain(t);
-
-      raf = requestAnimationFrame(frame);
+      // 結果頁停留時收掉兩個全螢幕合成步驟：bloom 要把整張畫面讀回來（GPU→CPU
+      // 同步，最貴的一步），噪點是全螢幕 overlay 混色，兩者都與畫面內容無關。
+      heavyMix = damp(heavyMix, idleRef.current ? 0 : 1, 5, dt);
+      if (heavyMix > 0.02) {
+        if (q.bloom) drawBloom(b, heavyMix);
+        if (q.grain) drawGrain(t, heavyMix);
+      }
     }
 
     if (low) {
       // 低特效：靜態一幀，不跑 rAF、不掛事件
-      const now = performance.now();
-      last = now;
       if (ctx) {
         ctx.clearRect(0, 0, w, h);
         drawNebula(0);
@@ -366,7 +411,24 @@ export function SectorBackdrop({
       };
     }
 
-    raf = requestAnimationFrame(frame);
+    // 降級順序＝成本由高到低：bloom → 噪點 → 神光束 → 粒子 → 張數
+    const degrade = () => {
+      if (q.bloom) q.bloom = false;
+      else if (q.grain) q.grain = false;
+      else if (q.godRays > 2) q.godRays = 2;
+      else if (q.chipRatio > 0.5) {
+        q.chipRatio = 0.5;
+        ctx = build();
+      } else if (q.fpsScale > 0.5) q.fpsScale = 0.5;
+    };
+
+    const stopLoop = startFrameLoop({
+      fps: () =>
+        (idleRef.current ? profile.idleFps : profile.fps) * q.fpsScale,
+      draw: frame,
+      onBudgetExceeded: degrade,
+    });
+
     window.addEventListener("pointermove", onPointer, { passive: true });
     const onResize = () => {
       ctx = build();
@@ -375,7 +437,7 @@ export function SectorBackdrop({
 
     return () => {
       disposed = true;
-      cancelAnimationFrame(raf);
+      stopLoop();
       window.removeEventListener("pointermove", onPointer);
       window.removeEventListener("resize", onResize);
     };

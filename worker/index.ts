@@ -1,19 +1,11 @@
 import handler from "vinext/server/fetch-handler";
-import type { Env } from "cloudflare:workers";
-
-interface ScheduledController {
-  cron: string;
-  scheduledTime: number;
-}
-
-interface ExecutionContext {
-  waitUntil(promise: Promise<unknown>): void;
-}
 
 // 自訂 worker entry：re-export vinext 的 fetch handler，並掛上
 // Cloudflare Cron Triggers 用的 scheduled()。
 // scheduled 內部直接以 /api/cron/snapshot 走完授權與快照流程，
 // 該 route 仍可手動呼叫（Bearer CRON_SECRET）。
+// 型別（Env／ScheduledController／ExecutionContext）來自 worker-configuration.d.ts，
+// 以 npm run cf-typegen 產生，不要手寫。
 const worker = {
   fetch(request: Request, env: Env, ctx: ExecutionContext): Response | Promise<Response> {
     return handler.fetch(request, env, ctx);

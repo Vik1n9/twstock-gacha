@@ -45,7 +45,7 @@
 | 稀有度 | 30 日漲跌幅：0~<5% C、5~<15% R、15~<30% SR、≥30% SSR；下跌取絕對值同門檻 |
 | 方向機率 | 板塊池依當日池內實際漲跌分布動態計算；全市場池固定 50/50 |
 | 稀有度機率 | 方向內目標 C 80% / R 15% / SR 4% / SSR 1%；逐抽獨立（同張卡可重複抽出） |
-| 跳變演出 | 純展示：抽中 SR 有 1/10 以「R 蓄力→跳升 SR」演出（全體約 0.4%）、SSR 有 1/10 以「SR 蓄力→跳升 SSR」（約 0.1%）；不改機率、不入抽卡紀錄 |
+| 跳變演出 | 純展示：抽中 SR 有 1/10 以「R 蓄力→昇格 SR」演出（全體約 0.4%）、SSR 有 1/10 以「SR 蓄力→昇格 SSR」（約 0.1%）；不改機率、不入抽卡紀錄。演出編排見下方 |
 | 開放政策 | 所有卡池常態開放、無活動週期鎖池；單方向池照常開放（企劃書 5.4 方案B），方向機率即反映實際分布 |
 | 空池 | 維持原方向，稀有度逐級下降；C 仍無貨視為資料異常 |
 
@@ -60,8 +60,10 @@ npx wrangler d1 execute twstock-gacha --local --file ./drizzle/0000_init-d1.sql 
 npm run seed                   # 16 板塊 + 全市場池 + 上市普通股 + 板塊映射（經 D1 HTTP API）
 npm run backfill               # 回填 60 日曆天收盤價 + 計算漲跌幅
 npm run snapshot               # 生成最新交易日快照（可 --date YYYY-MM-DD）
-npm run dev:vinext             # http://localhost:3001（Vite dev）
-npm run start:vinext           # 以 wrangler dev 跑建置後的 Worker（本機 D1，port 8787）
+npm run dev                    # http://localhost:3001（vinext dev）
+npm run build                  # Vite 多環境建置（client + RSC + SSR）
+npm run start                  # 以 wrangler dev 跑建置後的 Worker（本機 D1，port 8787）
+npm run cf-typegen             # wrangler.jsonc 改動後重新產生 worker-configuration.d.ts
 npm test                       # 單元測試（稀有度/快照/抽卡引擎）
 npx tsx scripts/verify-odds.ts [-- --pool POOL_AI]  # 對真實快照模擬 30 萬抽驗機率
 ```
@@ -73,8 +75,8 @@ npx tsx scripts/verify-odds.ts [-- --pool POOL_AI]  # 對真實快照模擬 30 �
 ## 部署（Cloudflare Workers + D1）
 
 ```bash
-npm run build:vinext     # Vite 多環境建置（client + RSC + SSR）
-npm run deploy:vinext    # 部署到 Cloudflare Workers（含 cron trigger）
+npm run build            # Vite 多環境建置（client + RSC + SSR）
+npm run deploy           # 部署到 Cloudflare Workers（含 cron trigger）
 ```
 
 1. 建資源：`npx wrangler d1 create twstock-gacha`、`npx wrangler kv namespace create VINEXT_KV_CACHE`，
@@ -85,6 +87,11 @@ npm run deploy:vinext    # 部署到 Cloudflare Workers（含 cron trigger）
 4. 密鑰：`npx wrangler secret put CRON_SECRET`。
 5. Cron：`wrangler.jsonc` `triggers.crons`＝`0 10 * * 1-5`（平日台北 18:00，與原 Vercel 排程相同）。
    手動觸發：`curl -H "Authorization: Bearer $CRON_SECRET" https://<worker>.workers.dev/api/cron/snapshot`。
+   `observability` 已開啟，cron 失敗會留在 Workers Logs（`npx wrangler tail`）。
+
+> 型別：綁定型別由 `npm run cf-typegen`（`wrangler types`）產生到 `worker-configuration.d.ts`
+> 並入版控，改動 `wrangler.jsonc` 後要重跑。`CRON_SECRET` 是 `wrangler secret put` 設的機密，
+> 不在 wrangler 設定內，故補宣告於 `types/env.d.ts`。
 
 ## 部署（Vercel + Neon，main 分支）
 
@@ -105,6 +112,34 @@ npm run deploy:vinext    # 部署到 Cloudflare Workers（含 cron trigger）
 | `POST /api/draw` | `{poolId, drawType: single\|ten}` 抽卡 |
 | `GET /api/cron/snapshot` | Bearer `CRON_SECRET`；抓收盤＋生成快照（冪等） |
 
+## 跳變（昇格）演出
+
+`components/gacha/PreRoll.tsx`。靠「先給一個看似已定案的低階結果」製造落差，分四拍：
+
+| 拍 | 長度 | 內容 |
+|---|---:|---|
+| A 假結局 | 0.62s | 能量減速停轉、低階色蓋章落定、徽章與板塊名退到背景 →「喔…只有 R」 |
+| B 異常 | 0.42~0.50s | 暗角收攏、蓋章故障龜裂、低階色兩片蓋住畫面、粒子完全停格 → 屏息 |
+| C 撕裂 | 0.5s | 畫面自中央鋸齒撕開，兩片扯離，結果色從後面炸出，結果字母砸進畫面 |
+| D 餘韻 | 0.4s | 字母站定後才引爆中央爆點，撐到爆點散開才退場 |
+
+SSR 昇格（`big`）每一段都再加碼：多屏息一拍、字母更大、多一記餘震白閃。
+
+編排上有兩個必須留意的限制：
+
+1. **爆點在更上層。** `RevealFx` 的 canvas 是 z-30，而 `PreRoll` 整棵樹在 z-10 容器內，
+   所以字母與爆點同時出現時字母會被整個蓋掉。因此字母先站定（C+0.10），爆點延到
+   C+0.38 才炸，當成它的落槌。
+2. **同色系的強光會吃掉字母。** 結果字母用白字＋稀有度色描邊＋暗底盤，並在亮相期間
+   壓低能量核心亮度（`Field.core`），否則橘字會直接融進橘色光核。
+
+卡面端（`GachaStage.impact`）對應三段式爆點：低階色爆開 → **內爆收束**（`RevealFx.implode`）
+→ 結果色正式炸開。中間那記內爆是關鍵，少了它兩發爆點只像同一個特效放兩次。
+
+前置演出**不是固定長度**：時間軸在 1.70s 有一道閘門，抽卡結果還沒回來就停在滿蓄力等待
+（上限 6s），演完才由 `onDone` 通知上層進入翻牌。沒有這道閘門的話，Neon 免費方案限流時
+`/api/draw` 動輒數秒，稀有度預告與整段昇格演出都會被跳過。
+
 ## 資料載入分層
 
 前台不會在開啟網頁時就把所有資料撈進來，而是分三段：
@@ -117,6 +152,55 @@ npm run deploy:vinext    # 部署到 Cloudflare Workers（含 cron trigger）
 
 卡池資料每個交易日只在 cron 快照後變動一次，故 1、2 以 `unstable_cache`
 （tag `pools`）快取；`/api/cron/snapshot` 生成新快照後會 `revalidateTag` 失效。
+
+前端 JS 同樣分階段：GSAP 與所有演出元件集中在 `components/gacha/performance.ts`，
+由 `lib/hooks/useIdlePreload.ts` 動態載入 —— 首屏不下載，瀏覽器閒置時才背景取，
+按下抽卡（或在 `/history` 點卡片）時才保證就緒。**新增演出元件時記得一併加進
+`performance.ts` 匯出**，否則它會被靜態 import 拉回首屏。
+
+| 頁面 | 首屏 route JS |
+|---|---:|
+| `/` | 51 KB（原 166 KB） |
+| `/history` | 36 KB（原 125 KB） |
+| 演出 chunk（GSAP＋特效，兩頁共用） | 85 KB，延後載入 |
+
+## 特效節流（手機發熱）
+
+演出很吃 GPU，而手機的**持續**散熱能力遠低於瞬時效能：跑分挑等級會在前 30 秒看起來
+很好、之後降頻到比保守設定還糟。`lib/fx/quality.ts` 因此把「畫多細」與「畫多快」集中
+管理，各 canvas 元件只要問 `fxProfile()` 並用 `startFrameLoop()` 取代裸的
+`requestAnimationFrame`。
+
+| 檔次 | 判定 | 解析度上限 | 粒子 | bloom／噪點 | 持續／結果頁／命中特效張數 |
+|---|---|---:|---:|---|---:|
+| `low` | 觸控且核心 ≤ 4 或記憶體 ≤ 3 GB | 1.0x | 40% | 皆關 | 30／20／60 |
+| `mid` | 其餘觸控裝置、或核心 ≤ 4 的桌機 | 1.5x | 65% | 只開 bloom | 45／24／60 |
+| `high` | 桌機且核心 > 4、記憶體 > 4 GB | 2.0x | 100% | 皆開 | 60／30／60 |
+
+命中特效（翻牌爆點、SSR 簽名）三檔一律 60：發熱來自**持續**滿載，不是一兩秒的
+尖峰，而那幾秒正是整個遊戲的情緒高點。60 仍擋掉 120Hz 螢幕的工作量翻倍，弱勢裝置
+本來就跑不到 60，天花板拉高不會讓它多花力氣。
+
+張數會被螢幕更新率**量化**——只能每 k 幀畫一次，所以 60Hz 實得 60/30/20/15，
+120Hz 實得 120/60/40/30/24/20。`mid` 的 45 在 60Hz 上實得 30、在 120Hz 上實得 40。
+調整這些數字時要一併看量化後的結果，否則會設出「看似更高、實際同格」的值
+（`lib/fx/quality.test.ts` 有針對這點的迴歸測試）。
+
+四道節流，缺一不可：
+
+1. **解析度**。手機 DPR 常是 3，過去鉗在 2 仍是 CSS 尺寸的 4 倍像素量；全螢幕特效光是
+   填色就足以讓機身發燙。
+2. **張數上限**。裸 rAF 在 90/120Hz 螢幕上直接把工作量再乘 1.5～2 倍，`startFrameLoop`
+   把它壓回目標值，並在分頁隱藏時完全停機。
+3. **結果頁降檔**（`SectorBackdrop` 的 `idle`）。結果頁是玩家停留最久的畫面，背景在那裡
+   降到 `idleFps` 並收掉 bloom 與噪點這兩個全螢幕合成步驟（淡出，不是瞬間消失）。
+4. **量到超支就降級**。`startFrameLoop` 量的是「我們自己畫了多久」，不是幀間隔；連續超
+   出六成預算就回呼，由 `SectorBackdrop` 依 bloom → 噪點 → 神光束 → 粒子 → 張數的順序
+   單向下修（不回升，避免在臨界點來回抖動）。
+
+另外兩處：bloom 的模糊改在 1/4 解析度的離屏 canvas 上做（canvas filter 成本算在目的地
+像素上，同樣視覺效果差約 16 倍工作量）；`html[data-lowfx]` 讓「特效：低」開關也能停掉
+卡面的無限 CSS 動畫——過去那個開關只影響 canvas，`prefers-reduced-motion` 才吃得到 CSS。
 
 ## 已知限制（beta）
 

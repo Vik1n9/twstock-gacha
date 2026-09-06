@@ -4,9 +4,9 @@
   "private": true,
   "license": "MIT",
   "scripts": {
-    "dev": "next dev",
-    "build": "next build",
-    "start": "next start",
+    "dev": "vinext dev --port 3001",
+    "build": "vinext build",
+    "start": "wrangler dev --config dist/server/wrangler.json --persist-to .wrangler/state",
     "lint": "eslint",
     "typecheck": "tsc --noEmit",
     "db:generate": "drizzle-kit generate",
@@ -18,10 +18,8 @@
     "backfill": "tsx scripts/backfill.ts --days 60",
     "snapshot": "tsx scripts/snapshot.ts",
     "test": "vitest run",
-    "dev:vinext": "vinext dev --port 3001",
-    "build:vinext": "vinext build",
-    "start:vinext": "wrangler dev --config dist/server/wrangler.json --persist-to .wrangler/state",
-    "deploy:vinext": "vinext-cloudflare deploy --config dist/server/wrangler.json"
+    "deploy": "vinext-cloudflare deploy --config dist/server/wrangler.json",
+    "cf-typegen": "wrangler types"
   },
   "dependencies": {
     "@vinext/cloudflare": "^1.0.0-beta.7",

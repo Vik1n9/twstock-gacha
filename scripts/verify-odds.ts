@@ -14,7 +14,8 @@ loadEnv();
 // 企劃書 9.1 全市場池固定 50/50、9.2 板塊池動態方向機率、9.4 稀有度目標 80/15/4/1、
 // 10.2 空池降級補償。用法：npm run verify-odds [-- --pool POOL_ALL]（預設跑全部開放池）
 async function main() {
-  const { db } = await import("../lib/db/client");
+  const { getDb } = await import("../lib/db/client");
+  const db = await getDb();
   const { pools } = await import("../lib/db/schema");
   const { eq } = await import("drizzle-orm");
 
@@ -41,11 +42,11 @@ async function main() {
   if (anyFail) process.exitCode = 1;
 }
 
-type DbClient = typeof import("../lib/db/client");
+type Db = import("../lib/db/client").Db;
 type PoolRow = import("../lib/db/schema").Pool;
 
 async function verifyPool(
-  db: DbClient["db"],
+  db: Db,
   pool: PoolRow,
 ): Promise<boolean> {
   const { poolSnapshots, snapshotStocks } = await import("../lib/db/schema");

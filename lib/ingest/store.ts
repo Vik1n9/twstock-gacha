@@ -1,4 +1,4 @@
-import { db, batchAll } from "../db/client";
+import { getDb, batchAll } from "../db/client";
 import { stockPrices, stocks } from "../db/schema";
 import { eq, sql } from "drizzle-orm";
 import type { FetchDailyResult } from "../ingest/twse";
@@ -6,6 +6,7 @@ import type { FetchDailyResult } from "../ingest/twse";
 // 將單日全市場收盤資料入庫（僅存活躍股票），並以 LAG 重算 change1d
 // 供 scripts/backfill 與 cron route 共用；不負責關閉連線
 export async function storeDailyCloses(result: FetchDailyResult): Promise<number> {
+  const db = await getDb();
   const active = await db
     .select({ stockCode: stocks.stockCode })
     .from(stocks)
@@ -46,6 +47,7 @@ export async function storeDailyCloses(result: FetchDailyResult): Promise<number
 // 重算每日漲跌幅。SQLite（D1）支援 window function 與 UPDATE...FROM（3.33+），
 // 語意與原 PostgreSQL 版相同：對全表以 LAG 取前日收盤後回寫。
 export async function recomputeChange1d(): Promise<void> {
+  const db = await getDb();
   await db.run(sql`
     WITH lagged AS (
       SELECT stock_code, date, close,
