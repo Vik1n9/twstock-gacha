@@ -1,0 +1,1 @@
+CREATE INDEX `pool_snapshots_pool_idx` ON `pool_snapshots` (`pool_id`,`snapshot_date`);

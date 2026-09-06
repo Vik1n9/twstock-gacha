@@ -24,7 +24,24 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: "缺少 poolId" }, { status: 400 });
   }
 
-  const result = await draw(poolId, drawType);
+  let result: Awaited<ReturnType<typeof draw>>;
+  try {
+    result = await draw(poolId, drawType);
+  } catch (err) {
+    // 沒有這層 try/catch 的話，任何例外都會變成空 body 的 500，
+    // 前端只看到「卡住」，日誌也只剩框架的一行包裝訊息。
+    // cause 要分開印：D1／drizzle 的真正錯誤訊息藏在那裡。
+    const cause = err instanceof Error ? err.cause : undefined;
+    console.error("[api/draw]", err, "cause:", cause);
+    return NextResponse.json(
+      {
+        error: "抽卡時發生錯誤，請稍後再試。",
+        detail: err instanceof Error ? err.message : String(err),
+        cause: cause instanceof Error ? cause.message : (cause ?? null),
+      },
+      { status: 500 },
+    );
+  }
 
   if (!result.ok) {
     const map: Record<string, { msg: string; status: number }> = {

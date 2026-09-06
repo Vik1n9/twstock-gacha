@@ -1,13 +1,19 @@
 # 台股抽卡所
 
+**線上版**：https://twstock-gacha.twstock-gacha.workers.dev
+
 以真實台股行情驅動的抽卡網頁遊戲。卡片稀有度由個股**近 30 個交易日漲跌幅**決定，並實作板塊卡池系統（企劃書 v1.1，見 `docs/`）。
 
 **Beta 版範圍**：16 板塊池＋全市場池全數上線（上市普通股 1,084 檔）；板塊分類採「TWSE 產業別＋主題合併」（企劃書 3.1），AI 池為人工策展主題池；首頁卡池切換器；全市場池方向機率固定 50/50。精選池、還原股價為後續項目。
 
 ## 技術
 
-- Next.js 16.3（App Router、Turbopack）+ TypeScript + Tailwind v4
-- Neon Postgres（本機 dev 用 Docker Postgres）+ Drizzle ORM
+> 執行環境為 Cloudflare Workers + D1（以 [vinext](https://github.com/cloudflare/vinext) 於 Vite 上重實作 Next.js 16 API）。
+> 遷移前的 Vercel + Neon 版本存放於 `archive/vercel-neon` 分支，僅作備份，不再維護。
+
+- Next.js 16.3 API（App Router）經 vinext + Vite 8 建置，部署 Cloudflare Workers
+- Cloudflare D1（SQLite）+ Drizzle ORM（`drizzle-orm/sqlite-core`、D1 綁定／D1 HTTP API 雙模式）
+- Cloudflare Cron Triggers（平日 10:00 UTC 快照）＋ KV cache adapter（`unstable_cache`/`revalidateTag`）
 - GSAP + Canvas 粒子引擎（板塊主題 config 驅動）
 - 資料源：TWSE MI_INDEX（全市場日收盤）、TWSE OpenAPI t187ap03_L（上市清單/產業別）
 
@@ -50,28 +56,51 @@
 
 ```bash
 npm install
-docker compose up -d          # 本機 Postgres（port 54329）
-cp .env.example .env.local    # 指向本機 DB 或 Neon
-npm run db:push               # 建表
-npm run seed                  # 16 板塊 + 全市場池 + 上市普通股 + 板塊映射（TWSE API）
-npm run seed -- --dry-run     # 只印板塊分布，不動 DB
-npm run backfill              # 回填 60 日曆天收盤價 + 計算漲跌幅
-npm run snapshot              # 生成最新交易日快照（可 --date YYYY-MM-DD）
-npm run dev                   # http://localhost:3000
-npm test                      # 單元測試（稀有度/快照/抽卡引擎）
+npx wrangler login             # Cloudflare 授權（wrangler 操作需要）
+cp .env.example .env.local     # 填入 CLOUDFLARE_ACCOUNT_ID / CLOUDFLARE_D1_DATABASE_ID 等
+npm run db:generate            # schema 異動時產生 migration SQL（drizzle-kit generate）
+npx wrangler d1 execute twstock-gacha --local --file ./drizzle/0000_init-d1.sql --yes  # 本機 D1 建表
+npx wrangler d1 execute twstock-gacha --local --file ./drizzle/0001_pool-snapshots-pool-idx.sql --yes
+npm run seed                   # 16 板塊 + 全市場池 + 上市普通股 + 板塊映射（經 D1 HTTP API）
+npm run backfill               # 回填 60 日曆天收盤價（結束後統一算一次 change1d）
+npm run recompute              # 手動重算 change1d（校正用，可 --from / --to）
+npm run snapshot               # 生成最新交易日快照（可 --date YYYY-MM-DD）
+npm run dev                    # http://localhost:3001（vinext dev）
+npm run build                  # Vite 多環境建置（client + RSC + SSR）
+npm run start                  # 以 wrangler dev 跑建置後的 Worker（本機 D1，port 8787）
+npm run cf-typegen             # wrangler.jsonc 改動後重新產生 worker-configuration.d.ts
+npm test                       # 單元測試（稀有度/快照/抽卡引擎）
 npx tsx scripts/verify-odds.ts [-- --pool POOL_AI]  # 對真實快照模擬 30 萬抽驗機率
 ```
 
-## 部署（Vercel + Neon）
+> seed/backfill/snapshot 走 D1 HTTP API，需要 `.env.local` 內的
+> `CLOUDFLARE_ACCOUNT_ID`、`CLOUDFLARE_D1_DATABASE_ID`、`CLOUDFLARE_API_TOKEN`
+> （token 於 [dash → API Tokens](https://dash.cloudflare.com/profile/api-tokens) 建立，需 D1 Edit 權限）。
 
-1. [Neon](https://neon.tech) 建專案，取得 pooled connection string。
-2. Vercel 匯入本 repo，設定環境變數：
-   - `DATABASE_URL`＝Neon 連線字串（含 `?sslmode=require`）
-   - `CRON_SECRET`＝自訂密鑰（Vercel Cron 會自動以 Bearer 送出）
-3. `npx drizzle-kit push`（本機 `.env.local` 改指向 Neon 後執行）→ `npm run seed` → `npm run backfill`。
-4. 部署後手動觸發一次快照：
-   `curl -H "Authorization: Bearer $CRON_SECRET" https://<app>.vercel.app/api/cron/snapshot`
-5. Cron：平日 10:00 UTC（台北 18:00）自動抓收盤並生成快照（`vercel.json`）。
+## 部署（Cloudflare Workers + D1）
+
+```bash
+npm run build            # Vite 多環境建置（client + RSC + SSR）
+npm run deploy           # 部署到 Cloudflare Workers（含 cron trigger）
+```
+
+1. 建資源：`npx wrangler d1 create twstock-gacha`、`npx wrangler kv namespace create VINEXT_KV_CACHE`，
+   將 id 填入 `wrangler.jsonc`。
+2. 建表：`npx wrangler d1 execute twstock-gacha --remote --file ./drizzle/0000_init-d1.sql --yes`，
+   接著依序套用 `drizzle/` 下編號較大的 migration（目前為 `0001_pool-snapshots-pool-idx.sql`）。
+   schema 異動後以 `npm run db:generate` 產生新的 migration，部署前記得對 `--remote` 套用。
+3. 資料：從零開始用 `npm run seed` + `npm run backfill`；若要從舊的 Postgres 搬資料，
+   `npm run migrate:dump` 會產生 `drizzle/d1-migration.sql`，再以
+   `npx wrangler d1 execute twstock-gacha --remote --file drizzle/d1-migration.sql --yes` 匯入
+   （一次性工具，執行期不使用）。
+4. 密鑰：`npx wrangler secret put CRON_SECRET`。
+5. Cron：`wrangler.jsonc` `triggers.crons`＝`0 10 * * 1-5`（平日台北 18:00）。
+   手動觸發：`curl -H "Authorization: Bearer $CRON_SECRET" https://<worker>.workers.dev/api/cron/snapshot`。
+   `observability` 已開啟，cron 失敗會留在 Workers Logs（`npx wrangler tail`）。
+
+> 型別：綁定型別由 `npm run cf-typegen`（`wrangler types`）產生到 `worker-configuration.d.ts`
+> 並入版控，改動 `wrangler.jsonc` 後要重跑。`CRON_SECRET` 是 `wrangler secret put` 設的機密，
+> 不在 wrangler 設定內，故補宣告於 `types/env.d.ts`。
 
 ## API
 
@@ -106,8 +135,32 @@ SSR 昇格（`big`）每一段都再加碼：多屏息一拍、字母更大、�
 → 結果色正式炸開。中間那記內爆是關鍵，少了它兩發爆點只像同一個特效放兩次。
 
 前置演出**不是固定長度**：時間軸在 1.70s 有一道閘門，抽卡結果還沒回來就停在滿蓄力等待
-（上限 6s），演完才由 `onDone` 通知上層進入翻牌。沒有這道閘門的話，Neon 免費方案限流時
-`/api/draw` 動輒數秒，稀有度預告與整段昇格演出都會被跳過。
+（上限 6s），演完才由 `onDone` 通知上層進入翻牌。沒有這道閘門的話，`/api/draw` 一慢
+（當初是 Neon 免費方案限流，現在則可能是 D1 查詢或冷啟動）稀有度預告與整段昇格演出就會被跳過。
+
+## 寫入量與 D1 配額
+
+D1 的寫入額度（[官方定價](https://developers.cloudflare.com/d1/platform/pricing/)）：
+Workers Free 每日 100,000 列、Workers Paid 每月內含 5,000 萬列。
+**超過後讀取仍正常、所有寫入失敗**——表現為頁面看得到但抽卡回 500（`draw_records` 寫不進去），
+且 drizzle 只會拋出 `Failed query: insert into ...`，真正的原因在 `Error.cause`
+（`/api/draw` 已會把它記進 Workers Logs）。因此每日流程刻意壓低寫入量：
+
+| 動作 | 寫入列數 |
+|---|---:|
+| 每日 cron：收盤入庫 | 約 1,100（該日一次） |
+| 每日 cron：重算 change1d | 約 1,100（**只算當日**） |
+| 每日 cron：快照明細 | 約 2,100 |
+| `npm run backfill --days 60` | 約 65,000（結束後只重算一次） |
+
+兩個設計上的取捨：
+
+- `change1d` **只重算當次匯入的那一天**。前一天的值在前一天就算過了，不必重算。
+  （先前是無界的全表 UPDATE 且每匯入一天跑一次：每日 cron 約 64,000 列並隨歷史成長，
+  backfill 60 天約 200 萬列——這正是配額被用盡的原因。）
+- 收盤資料**該日已完整入庫就不重抓重寫**。`findLastTradingDay()` 找不到當日資料時會往回退，
+  否則每次都會把前一交易日重寫一遍。
+- 需要回頭校正歷史資料時，用 `npm run recompute -- --from ... --to ...` 明確觸發，不放進排程。
 
 ## 資料載入分層
 

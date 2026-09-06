@@ -8,7 +8,6 @@ async function main() {
   const { generatePoolSnapshots, latestTradingDate } = await import(
     "../lib/pool/generate"
   );
-  const { client } = await import("../lib/db/client");
 
   const dateIdx = process.argv.indexOf("--date");
   const date =
@@ -30,8 +29,9 @@ async function main() {
         ].join("　|　"),
       );
     }
-  } finally {
-    await client.end().catch(() => {});
+  } catch (err) {
+    console.error(err);
+    process.exitCode = 1;
   }
 }
 
