@@ -74,14 +74,12 @@ npx wrangler d1 execute twstock-gacha --remote --yes \
 
 ---
 
-## 4. GitHub repo 資訊
+## ~~4. GitHub repo 資訊~~ — ✅ 已完成（2026-09-06）
 
-Repo 首頁 → About（右上角齒輪）：
+已於 GitHub API 確認：
 
-- **Description**（目前仍寫 Neon）：
-  - 現在：`台股抽卡所 — 以台股 30 日漲跌幅決定稀有度的板塊抽卡遊戲（Next.js + Drizzle + Neon）`
-  - 改為：`台股抽卡所 — 以台股 30 日漲跌幅決定稀有度的板塊抽卡遊戲（Cloudflare Workers + D1 + Drizzle）`
-- **Website**：`https://twstock-gacha.twstock-gacha.workers.dev`
+- Description：`台股抽卡所 — 以台股 30 日漲跌幅決定稀有度的板塊抽卡遊戲（Cloudflare Workers + D1 + Drizzle）`
+- Homepage：`https://twstock-gacha.twstock-gacha.workers.dev`
 
 ---
 
