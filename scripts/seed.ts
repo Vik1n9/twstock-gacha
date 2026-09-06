@@ -105,7 +105,7 @@ async function dryRun(): Promise<void> {
 }
 
 async function seedToDb(): Promise<void> {
-  const { db, client } = await import("../lib/db/client");
+  const { db } = await import("../lib/db/client");
   const { boards, pools, stocks, stockBoards } = await import("../lib/db/schema");
   const { and, eq, notInArray } = await import("drizzle-orm");
 
@@ -185,8 +185,9 @@ async function seedToDb(): Promise<void> {
     );
 
     // 3) 股票：全市場上市普通股（無板塊歸屬者也入庫，僅進全市場池）
+    // D1 單查詢上限 100 個綁定參數：每列 6 欄 → 每批最多 16 列
     const all = await fetchAllListed();
-    for (let i = 0; i < all.length; i += 200) {
+    for (let i = 0; i < all.length; i += 16) {
       await db
         .insert(stocks)
         .values(
@@ -231,7 +232,8 @@ async function seedToDb(): Promise<void> {
     for (const c of aiValid) {
       mappings.push({ stockCode: c, tagId: "AI", isPrimary: false });
     }
-    for (let i = 0; i < mappings.length; i += 500) {
+    // D1 單查詢上限 100 個綁定參數：每列 3 欄 → 每批最多 30 列
+    for (let i = 0; i < mappings.length; i += 30) {
       await db
         .insert(stockBoards)
         .values(mappings.slice(i, i + 500))
@@ -261,18 +263,19 @@ async function seedToDb(): Promise<void> {
     // 5) 驗證
     for (const b of activeBoards) {
       const [cnt] = await db
-        .select({ c: sql<number>`count(*)::int` })
+        .select({ c: sql<number>`count(*)` })
         .from(stockBoards)
         .where(eq(stockBoards.tagId, b.tagId));
       console.log(`  ${b.tagName}池：${cnt.c} 檔`);
     }
     const [allCnt] = await db
-      .select({ c: sql<number>`count(*)::int` })
+      .select({ c: sql<number>`count(*)` })
       .from(stocks)
       .where(eq(stocks.active, true));
     console.log(`DB 驗證：活躍股票 ${allCnt.c} 檔（全市場池）`);
-  } finally {
-    await client.end().catch(() => {});
+  } catch (err) {
+    console.error(err);
+    process.exitCode = 1;
   }
 }
 

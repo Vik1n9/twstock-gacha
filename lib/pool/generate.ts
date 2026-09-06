@@ -1,5 +1,5 @@
 import { sql } from "drizzle-orm";
-import { db } from "../db/client";
+import { db, batchAll } from "../db/client";
 import {
   poolSnapshots,
   pools,
@@ -86,26 +86,43 @@ export async function generatePoolSnapshots(
 
     // 該池股票全部歷史（date <= snapshotDate），JS 端分組取視窗
     // beta 資料量：全市場池 ~1100 檔 × ~45 日 ≈ 50k 列，單查詢仍可承受
-    const rows = await db
-      .select({
-        stockCode: stockPrices.stockCode,
-        date: stockPrices.date,
-        close: stockPrices.close,
-      })
-      .from(stockPrices)
-      .where(
-        and(
-          inArray(stockPrices.stockCode, codes),
-          lte(stockPrices.date, snapshotDate),
-        ),
-      )
-      .orderBy(desc(stockPrices.date), stockPrices.stockCode);
+    // D1 單查詢上限 100 綁定參數：全市場池（＝所有活躍股票）直接查全表；
+    // 板塊池以 90 檔為單位分批 IN，各檔只會落在單一分批，分組順序不受影響
+    const selectPoolPrices = (part: string[]) =>
+      db
+        .select({
+          stockCode: stockPrices.stockCode,
+          date: stockPrices.date,
+          close: stockPrices.close,
+        })
+        .from(stockPrices)
+        .where(
+          and(
+            part.length > 0 ? inArray(stockPrices.stockCode, part) : undefined,
+            lte(stockPrices.date, snapshotDate),
+          ),
+        )
+        .orderBy(desc(stockPrices.date), stockPrices.stockCode);
 
     const byStock = new Map<string, { date: string; close: number }[]>();
-    for (const r of rows) {
-      const list = byStock.get(r.stockCode);
-      if (list) list.push({ date: r.date, close: r.close });
-      else byStock.set(r.stockCode, [{ date: r.date, close: r.close }]);
+    if (pool.poolType === "market") {
+      // 全市場池＝所有活躍股票，無需 IN 過濾（陳舊價格列由快照日檢查剔除）
+      const rows = await selectPoolPrices([]);
+      for (const r of rows) {
+        const list = byStock.get(r.stockCode);
+        if (list) list.push({ date: r.date, close: r.close });
+        else byStock.set(r.stockCode, [{ date: r.date, close: r.close }]);
+      }
+    } else {
+      // 板塊池：以 90 檔為單位分批 IN，各檔只會落在單一分批
+      for (let i = 0; i < codes.length; i += 90) {
+        const rows = await selectPoolPrices(codes.slice(i, i + 90));
+        for (const r of rows) {
+          const list = byStock.get(r.stockCode);
+          if (list) list.push({ date: r.date, close: r.close });
+          else byStock.set(r.stockCode, [{ date: r.date, close: r.close }]);
+        }
+      }
     }
 
     const metrics: (StockMetrics & { stockCode: string })[] = [];
@@ -117,26 +134,27 @@ export async function generatePoolSnapshots(
 
     const gate = gatePool(metrics);
 
-    // 冪等寫入：交易內刪舊插新
-    await db.transaction(async (tx) => {
-      await tx
+    // 冪等寫入：D1 無互動式交易，改用 batch（原子上限內分批，重跑先刪後寫補償）
+    // D1 單查詢上限 100 個綁定參數：snapshot_stocks 每列 11 欄 → 每批最多 9 列
+    const statements = [];
+    statements.push(
+      db
         .delete(snapshotStocks)
         .where(
           and(
             eq(snapshotStocks.snapshotDate, snapshotDate),
             eq(snapshotStocks.poolId, pool.poolId),
           ),
-        );
-      await tx
+        ),
+      db
         .delete(poolSnapshots)
         .where(
           and(
             eq(poolSnapshots.snapshotDate, snapshotDate),
             eq(poolSnapshots.poolId, pool.poolId),
           ),
-        );
-
-      await tx.insert(poolSnapshots).values({
+        ),
+      db.insert(poolSnapshots).values({
         snapshotDate,
         poolId: pool.poolId,
         stockCount: gate.stockCount,
@@ -146,12 +164,14 @@ export async function generatePoolSnapshots(
         board30dStrength: gate.board30dStrength,
         isOpen: gate.isOpen,
         reason: gate.reason,
-      });
+      }),
+    );
 
-      if (metrics.length > 0) {
-        for (let i = 0; i < metrics.length; i += 500) {
-          await tx.insert(snapshotStocks).values(
-            metrics.slice(i, i + 500).map((m) => ({
+    if (metrics.length > 0) {
+      for (let i = 0; i < metrics.length; i += 9) {
+        statements.push(
+          db.insert(snapshotStocks).values(
+            metrics.slice(i, i + 9).map((m) => ({
               snapshotDate,
               poolId: pool.poolId,
               stockCode: m.stockCode,
@@ -163,10 +183,14 @@ export async function generatePoolSnapshots(
               weight: 1,
               drawable: true,
             })),
-          );
-        }
+          ),
+        );
       }
-    });
+    }
+
+    for (let i = 0; i < statements.length; i += 50) {
+      await batchAll(statements.slice(i, i + 50));
+    }
 
     summaries.push({ poolId: pool.poolId, snapshotDate, ...gate });
   }

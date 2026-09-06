@@ -4,7 +4,7 @@ import { db } from "@/lib/db/client";
 import { boards, poolSnapshots, pools, snapshotStocks } from "@/lib/db/schema";
 import { BOARD_MAP, MARKET_POOL } from "@/lib/sectors/defs";
 import type { PoolInfo, PoolSnapshotInfo } from "@/lib/api/types";
-import { desc, eq, inArray, sql } from "drizzle-orm";
+import { eq, inArray, sql } from "drizzle-orm";
 
 // 頁面（server component）與 /api/pools 共用的卡池查詢
 //
@@ -32,15 +32,38 @@ async function loadActivePools(withRarityCounts: boolean): Promise<PoolInfo[]> {
 
   const poolIds = activePools.map((p) => p.poolId);
 
-  // 各池最新快照一次取回（DISTINCT ON），板塊表僅十餘列故整張讀入
-  const [latestSnapshots, allBoards] = await Promise.all([
+  // 各池最新快照：SQLite（D1）無 DISTINCT ON，整批取回後在 JS 端取最新。
+  // pool_snapshots 每池每日一列（數年僅數千列），整批讀取可承受；板塊表僅十餘列故整張讀入
+  const [allSnapshots, allBoards] = await Promise.all([
     db
-      .selectDistinctOn([poolSnapshots.poolId])
+      .select({
+        poolId: poolSnapshots.poolId,
+        snapshotDate: poolSnapshots.snapshotDate,
+        stockCount: poolSnapshots.stockCount,
+        upStockCount: poolSnapshots.upStockCount,
+        downStockCount: poolSnapshots.downStockCount,
+        board1dStrength: poolSnapshots.board1dStrength,
+        board30dStrength: poolSnapshots.board30dStrength,
+        isOpen: poolSnapshots.isOpen,
+        reason: poolSnapshots.reason,
+      })
       .from(poolSnapshots)
-      .where(inArray(poolSnapshots.poolId, poolIds))
-      .orderBy(poolSnapshots.poolId, desc(poolSnapshots.snapshotDate)),
+      .where(inArray(poolSnapshots.poolId, poolIds)),
     db.select().from(boards),
   ]);
+
+  const latestSnapshots: typeof allSnapshots = [];
+  const latestByPool = new Map<string, (typeof allSnapshots)[number]>();
+  for (const row of allSnapshots) {
+    const cur = latestByPool.get(row.poolId);
+    if (!cur || row.snapshotDate > cur.snapshotDate) {
+      latestByPool.set(row.poolId, row);
+    }
+  }
+  for (const poolId of poolIds) {
+    const row = latestByPool.get(poolId);
+    if (row) latestSnapshots.push(row);
+  }
 
   const snapshotByPool = new Map(latestSnapshots.map((s) => [s.poolId, s]));
   const boardByTag = new Map(allBoards.map((b) => [b.tagId, b]));
@@ -120,7 +143,7 @@ async function loadRarityCounts(
       snapshotDate: snapshotStocks.snapshotDate,
       direction: snapshotStocks.direction,
       rarity: snapshotStocks.rarity,
-      n: sql<number>`count(*)::int`,
+      n: sql<number>`count(*)`,
     })
     .from(snapshotStocks)
     .where(

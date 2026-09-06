@@ -1,6 +1,6 @@
-import { db } from "../db/client";
+import { db, batchAll } from "../db/client";
 import { stockPrices, stocks } from "../db/schema";
-import { sql } from "drizzle-orm";
+import { eq, sql } from "drizzle-orm";
 import type { FetchDailyResult } from "../ingest/twse";
 
 // 將單日全市場收盤資料入庫（僅存活躍股票），並以 LAG 重算 change1d
@@ -9,7 +9,7 @@ export async function storeDailyCloses(result: FetchDailyResult): Promise<number
   const active = await db
     .select({ stockCode: stocks.stockCode })
     .from(stocks)
-    .where(sql`active = true`);
+    .where(eq(stocks.active, true));
   const codes = new Set(active.map((s) => s.stockCode));
 
   const rows = result.rows
@@ -22,30 +22,39 @@ export async function storeDailyCloses(result: FetchDailyResult): Promise<number
     }));
   if (rows.length === 0) return 0;
 
-  for (let i = 0; i < rows.length; i += 500) {
-    await db
-      .insert(stockPrices)
-      .values(rows.slice(i, i + 500))
-      .onConflictDoUpdate({
-        target: [stockPrices.stockCode, stockPrices.date],
-        set: { close: sql`excluded.close`, volume: sql`excluded.volume` },
-      });
+  // D1 單查詢上限 100 個綁定參數：stock_prices 每列 4 欄 → 每批最多 24 列
+  const statements = [];
+  for (let i = 0; i < rows.length; i += 24) {
+    statements.push(
+      db
+        .insert(stockPrices)
+        .values(rows.slice(i, i + 24))
+        .onConflictDoUpdate({
+          target: [stockPrices.stockCode, stockPrices.date],
+          set: { close: sql`excluded.close`, volume: sql`excluded.volume` },
+        }),
+    );
+  }
+  for (let i = 0; i < statements.length; i += 50) {
+    await batchAll(statements.slice(i, i + 50));
   }
 
   await recomputeChange1d();
   return rows.length;
 }
 
+// 重算每日漲跌幅。SQLite（D1）支援 window function 與 UPDATE...FROM（3.33+），
+// 語意與原 PostgreSQL 版相同：對全表以 LAG 取前日收盤後回寫。
 export async function recomputeChange1d(): Promise<void> {
-  await db.execute(sql`
+  await db.run(sql`
     WITH lagged AS (
       SELECT stock_code, date, close,
         LAG(close) OVER (PARTITION BY stock_code ORDER BY date) AS prev
       FROM stock_prices
     )
-    UPDATE stock_prices sp
-    SET change1d = ROUND(((sp.close / l.prev - 1) * 100)::numeric, 4)::double precision
-    FROM lagged l
+    UPDATE stock_prices AS sp
+    SET change1d = ROUND((sp.close / l.prev - 1) * 100, 4)
+    FROM lagged AS l
     WHERE l.stock_code = sp.stock_code AND l.date = sp.date
       AND l.prev IS NOT NULL AND l.prev > 0
   `);

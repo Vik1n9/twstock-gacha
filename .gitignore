@@ -45,3 +45,17 @@ next-env.d.ts
 # vercel link（機器本機）
 .vercel
 .playwright-cli/
+/dist/
+.vinext/
+.wrangler/
+
+# wrangler local dev secrets
+.dev.vars
+.wrangler/
+
+# skills 工具安裝物（可用 npx skills add 重裝）
+.agents/
+skills-lock.json
+
+# 產生的資料遷移 dump（npm run migrate:dump 重新產生）
+drizzle/d1-migration.sql
