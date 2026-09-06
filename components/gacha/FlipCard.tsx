@@ -199,7 +199,7 @@ export function FlipCard({
 
     return () => {
       tl.kill();
-      gsap.killTweensOf([inner, tilt, aura, ring]);
+      gsap.killTweensOf([inner, tilt, aura, ring, jumpAura, jumpFlash]);
     };
   }, [low, delay, card.rarity, jumpFrom, size]);
 

@@ -51,8 +51,9 @@ export function PreRoll({
 
   useEffect(() => {
     cb.current = { onDone, onBoost, onJump };
+    hintRef.current = hint;
     jumpFromRef.current = jumpFrom ?? null;
-  }, [onDone, onBoost, onJump, jumpFrom]);
+  }, [onDone, onBoost, onJump, hint, jumpFrom]);
 
   // 3D 代號滾筒：把股票代號貼在一圈圓柱面上
   const drumFaces = useMemo(() => {
