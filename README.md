@@ -1,5 +1,7 @@
 # 台股抽卡所
 
+**線上版**：https://twstock-gacha.twstock-gacha.workers.dev
+
 以真實台股行情驅動的抽卡網頁遊戲。卡片稀有度由個股**近 30 個交易日漲跌幅**決定，並實作板塊卡池系統（企劃書 v1.1，見 `docs/`）。
 
 **Beta 版範圍**：16 板塊池＋全市場池全數上線（上市普通股 1,084 檔）；板塊分類採「TWSE 產業別＋主題合併」（企劃書 3.1），AI 池為人工策展主題池；首頁卡池切換器；全市場池方向機率固定 50/50。精選池、還原股價為後續項目。
@@ -87,8 +89,10 @@ npm run deploy           # 部署到 Cloudflare Workers（含 cron trigger）
 2. 建表：`npx wrangler d1 execute twstock-gacha --remote --file ./drizzle/0000_init-d1.sql --yes`，
    接著依序套用 `drizzle/` 下編號較大的 migration（目前為 `0001_pool-snapshots-pool-idx.sql`）。
    schema 異動後以 `npm run db:generate` 產生新的 migration，部署前記得對 `--remote` 套用。
-3. 資料：既有 Postgres 資料可用 `npm run migrate:dump` 產生 `drizzle/d1-migration.sql`，
-   再以 `npx wrangler d1 execute twstock-gacha --remote --file drizzle/d1-migration.sql --yes` 匯入。
+3. 資料：從零開始用 `npm run seed` + `npm run backfill`；若要從舊的 Postgres 搬資料，
+   `npm run migrate:dump` 會產生 `drizzle/d1-migration.sql`，再以
+   `npx wrangler d1 execute twstock-gacha --remote --file drizzle/d1-migration.sql --yes` 匯入
+   （一次性工具，執行期不使用）。
 4. 密鑰：`npx wrangler secret put CRON_SECRET`。
 5. Cron：`wrangler.jsonc` `triggers.crons`＝`0 10 * * 1-5`（平日台北 18:00）。
    手動觸發：`curl -H "Authorization: Bearer $CRON_SECRET" https://<worker>.workers.dev/api/cron/snapshot`。
@@ -131,14 +135,16 @@ SSR 昇格（`big`）每一段都再加碼：多屏息一拍、字母更大、�
 → 結果色正式炸開。中間那記內爆是關鍵，少了它兩發爆點只像同一個特效放兩次。
 
 前置演出**不是固定長度**：時間軸在 1.70s 有一道閘門，抽卡結果還沒回來就停在滿蓄力等待
-（上限 6s），演完才由 `onDone` 通知上層進入翻牌。沒有這道閘門的話，Neon 免費方案限流時
-`/api/draw` 動輒數秒，稀有度預告與整段昇格演出都會被跳過。
+（上限 6s），演完才由 `onDone` 通知上層進入翻牌。沒有這道閘門的話，`/api/draw` 一慢
+（當初是 Neon 免費方案限流，現在則可能是 D1 查詢或冷啟動）稀有度預告與整段昇格演出就會被跳過。
 
 ## 寫入量與 D1 配額
 
-D1 免費方案每日寫入上限 100,000 列（[官方定價](https://developers.cloudflare.com/d1/platform/pricing/)），
-超過後**讀取仍正常、所有寫入失敗**——表現為頁面看得到但抽卡回 500（`draw_records` 寫不進去）。
-因此每日流程刻意壓低寫入量：
+D1 的寫入額度（[官方定價](https://developers.cloudflare.com/d1/platform/pricing/)）：
+Workers Free 每日 100,000 列、Workers Paid 每月內含 5,000 萬列。
+**超過後讀取仍正常、所有寫入失敗**——表現為頁面看得到但抽卡回 500（`draw_records` 寫不進去），
+且 drizzle 只會拋出 `Failed query: insert into ...`，真正的原因在 `Error.cause`
+（`/api/draw` 已會把它記進 Workers Logs）。因此每日流程刻意壓低寫入量：
 
 | 動作 | 寫入列數 |
 |---|---:|
