@@ -1,11 +1,16 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useCallback, useMemo, useState } from "react";
 import Link from "next/link";
 import { StockCardFace } from "@/components/cards/StockCard";
-import { CardDetail, type CardDetailData } from "@/components/cards/CardDetail";
+import type { CardDetailData } from "@/components/cards/CardDetail";
 import { clearHistory, useHistory, type HistoryEntry } from "@/lib/history/store";
 import { RARITY_COLOR, RARITY_RANK, type Rarity } from "@/lib/fx/core";
+import { useIdlePreload } from "@/lib/hooks/useIdlePreload";
+
+// 放大檢視（CardDetail）帶著 GSAP，約 85 KB：紀錄列表本身用不到，
+// 等瀏覽器閒置才背景載入，玩家點卡片時再以 ensureDetail() 保證就緒。
+const loadCardDetail = () => import("@/components/cards/CardDetail");
 
 type View = "collection" | "timeline";
 const RARITIES: Rarity[] = ["SSR", "SR", "R", "C"];
@@ -41,6 +46,19 @@ export default function HistoryPage() {
   const [filter, setFilter] = useState<Rarity | null>(null);
   const [detail, setDetail] = useState<CardDetailData | null>(null);
   const [confirmClear, setConfirmClear] = useState(false);
+  const [detailMod, ensureDetail] = useIdlePreload(loadCardDetail);
+
+  const openDetail = useCallback(
+    async (c: CardDetailData) => {
+      try {
+        await ensureDetail();
+      } catch {
+        return; // 取不到 chunk 就不開視窗；再點一次會重試
+      }
+      setDetail(c);
+    },
+    [ensureDetail],
+  );
 
   const filtered = useMemo(
     () => (filter ? history.filter((e) => e.rarity === filter) : history),
@@ -200,16 +218,18 @@ export default function HistoryPage() {
                   key={entry.stockCode}
                   entry={entry}
                   badge={count > 1 ? `×${count}` : null}
-                  onOpen={setDetail}
+                  onOpen={openDetail}
                 />
               ))
             : filtered.map((entry) => (
-                <CardButton key={entry.id} entry={entry} badge={null} onOpen={setDetail} />
+                <CardButton key={entry.id} entry={entry} badge={null} onOpen={openDetail} />
               ))}
         </div>
       )}
 
-      <CardDetail card={detail} onClose={() => setDetail(null)} />
+      {detailMod && (
+        <detailMod.CardDetail card={detail} onClose={() => setDetail(null)} />
+      )}
     </div>
   );
 }
