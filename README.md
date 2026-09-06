@@ -6,7 +6,8 @@
 
 ## 技術
 
-> 本分支（`cloudflare-d1`）已將執行環境遷移至 Cloudflare Workers + D1（以 [vinext](https://github.com/cloudflare/vinext) 於 Vite 上重實作 Next.js 16 API），與 main 分支（Vercel + Neon）並行驗證中。
+> 執行環境為 Cloudflare Workers + D1（以 [vinext](https://github.com/cloudflare/vinext) 於 Vite 上重實作 Next.js 16 API）。
+> 遷移前的 Vercel + Neon 版本存放於 `archive/vercel-neon` 分支，僅作備份，不再維護。
 
 - Next.js 16.3 API（App Router）經 vinext + Vite 8 建置，部署 Cloudflare Workers
 - Cloudflare D1（SQLite）+ Drizzle ORM（`drizzle-orm/sqlite-core`、D1 綁定／D1 HTTP API 雙模式）
@@ -49,7 +50,7 @@
 | 開放政策 | 所有卡池常態開放、無活動週期鎖池；單方向池照常開放（企劃書 5.4 方案B），方向機率即反映實際分布 |
 | 空池 | 維持原方向，稀有度逐級下降；C 仍無貨視為資料異常 |
 
-## 本機開發（cloudflare-d1 分支）
+## 本機開發
 
 ```bash
 npm install
@@ -89,24 +90,13 @@ npm run deploy           # 部署到 Cloudflare Workers（含 cron trigger）
 3. 資料：既有 Postgres 資料可用 `npm run migrate:dump` 產生 `drizzle/d1-migration.sql`，
    再以 `npx wrangler d1 execute twstock-gacha --remote --file drizzle/d1-migration.sql --yes` 匯入。
 4. 密鑰：`npx wrangler secret put CRON_SECRET`。
-5. Cron：`wrangler.jsonc` `triggers.crons`＝`0 10 * * 1-5`（平日台北 18:00，與原 Vercel 排程相同）。
+5. Cron：`wrangler.jsonc` `triggers.crons`＝`0 10 * * 1-5`（平日台北 18:00）。
    手動觸發：`curl -H "Authorization: Bearer $CRON_SECRET" https://<worker>.workers.dev/api/cron/snapshot`。
    `observability` 已開啟，cron 失敗會留在 Workers Logs（`npx wrangler tail`）。
 
 > 型別：綁定型別由 `npm run cf-typegen`（`wrangler types`）產生到 `worker-configuration.d.ts`
 > 並入版控，改動 `wrangler.jsonc` 後要重跑。`CRON_SECRET` 是 `wrangler secret put` 設的機密，
 > 不在 wrangler 設定內，故補宣告於 `types/env.d.ts`。
-
-## 部署（Vercel + Neon，main 分支）
-
-1. [Neon](https://neon.tech) 建專案，取得 pooled connection string。
-2. Vercel 匯入本 repo，設定環境變數：
-   - `DATABASE_URL`＝Neon 連線字串（含 `?sslmode=require`）
-   - `CRON_SECRET`＝自訂密鑰（Vercel Cron 會自動以 Bearer 送出）
-3. `npx drizzle-kit push`（本機 `.env.local` 改指向 Neon 後執行）→ `npm run seed` → `npm run backfill`。
-4. 部署後手動觸發一次快照：
-   `curl -H "Authorization: Bearer $CRON_SECRET" https://<app>.vercel.app/api/cron/snapshot`
-5. Cron：平日 10:00 UTC（台北 18:00）自動抓收盤並生成快照（`vercel.json`）。
 
 ## API
 
