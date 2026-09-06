@@ -17,16 +17,24 @@
 
 ---
 
-## 1. ~~Cloudflare Worker 的部署分支~~ — ✅ 前提不成立，無需處理（2026-09-06）
+## 1. 部署自動化 — 決定採用 Workers Builds（2026-09-06）
 
-Dashboard 實際顯示此 Worker **未繫結任何 Git 整合**（部署清單中的
-"Unknown (deployment)" 皆為手動 `wrangler deploy`）。因此：
+Dashboard 確認此 Worker **未繫結任何 Git 整合**（部署清單中的
+"Unknown (deployment)" 皆為手動 `wrangler deploy`），`cloudflare-d1` 已刪除
+（已完整併入 main，無綁定依賴）。
 
-- 目前部署方式＝手動 `npm run deploy:vinext`，main 推送不會自動部署
-- `cloudflare-d1` 已於 2026-09-06 刪除（已完整併入 main，無綁定依賴）
-- 若要自動部署，可選：
-  - **GitHub Actions**：push 到 main 時跑 `npm run deploy:vinext`（repo secret 放 `CLOUDFLARE_API_TOKEN`，需 Workers Scripts Edit 權限）
-  - 或 Dashboard 手動接上 Workers Builds（Git 整合）
+**決定**：改用 Workers Builds（Git 整合）。Dashboard 接上時的建議設定：
+
+| 設定 | 值 |
+|---|---|
+| Repository / Branch | `Vik1n9/twstock-gacha` / `main` |
+| Install command | `npm ci` |
+| Build command | `npm run build:vinext` |
+| Deploy command | `npx wrangler deploy --config dist/server/wrangler.json` |
+
+> 注意：vinext 的 worker entry 依賴 Vite 虛擬模組，**不能用 root 的
+> `wrangler.jsonc` 直接 deploy**（`virtual:vinext-worker-entry` 無法解析），
+> 必須先 `build:vinext` 再以 `dist/server/wrangler.json` 部署。
 
 ## 2. ~~Vercel 專案的 Git 連結~~ — ✅ 已完成（2026-09-06）
 
@@ -66,10 +74,11 @@ SEARCH pool_snapshots USING INDEX pool_snapshots_pool_idx (pool_id=?)
 **待處理**：
 
 - ~~`cloudflare-d1`~~ 已刪除（2026-09-06，Git 整合確認不存在後無依賴）
-- `claude/happy-lamport-62xqyi`：有一個 main 沒有的 commit `04cd9e9`
-  （Postgres 時代的「DB client 延遲連線」修正）。該問題已由現行 `getDb()`（D1 雙模式）
-  以不同方式解決，功能上已無價值——確認後可刪
+- ~~`claude/happy-lamport-62xqyi`~~ 已刪除（2026-09-06；唯一 commit `04cd9e9`
+  的功能已由 main 現行 `getDb()` 取代）
 - `archive/vercel-neon`：**保留**，是 Vercel + Neon 版本的唯一存放處
+
+**剩餘**：Dashboard 完成 Workers Builds 接線（見第 1 項設定表）後，刪除本檔案。
 
 ---
 
