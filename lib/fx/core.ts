@@ -1,6 +1,8 @@
 // 特效共用核心：色彩、緩動、亂數、偽 3D 投影
 // 不依賴 WebGL：以 Canvas 2D + 透視投影達成深度感，行動裝置也吃得住。
 
+import { fxProfile } from "./quality";
+
 export type Rarity = "C" | "R" | "SR" | "SSR";
 
 export interface RGB {
@@ -166,10 +168,13 @@ export function topRarity(list: { rarity: Rarity }[]): Rarity {
   return best;
 }
 
-// 建立高解析度 canvas context（處理 devicePixelRatio）
+// 建立 canvas context（處理 devicePixelRatio）
+//
+// 解析度上限預設跟著裝置檔次走（見 lib/fx/quality.ts）：手機的 DPR 常是 3，
+// 過去鉗在 2 仍是 CSS 尺寸的 4 倍像素量，全螢幕特效光是填色就足以讓機身發燙。
 export function fitCanvas(
   canvas: HTMLCanvasElement,
-  maxDpr = 2,
+  maxDpr = fxProfile().maxDpr,
 ): { ctx: CanvasRenderingContext2D; w: number; h: number; dpr: number } | null {
   const ctx = canvas.getContext("2d");
   if (!ctx) return null;

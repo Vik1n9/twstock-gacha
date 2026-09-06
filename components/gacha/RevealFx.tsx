@@ -12,6 +12,7 @@ import {
   fitCanvas,
   rgba,
 } from "@/lib/fx/core";
+import { fxProfile, startFrameLoop } from "@/lib/fx/quality";
 
 // 翻牌命中特效層：全畫面共用一張 canvas，任何卡片翻開時往指定座標丟一發爆點。
 // 依稀有度分級：C 只有幾點火星，SSR 有衝擊波環＋光柱＋晶粒碎片＋金塵＋鏡頭光斑＋震動。
@@ -115,13 +116,15 @@ export const RevealFx = forwardRef<
     const canvas = canvasRef.current;
     if (!canvas) return;
 
+    const profile = fxProfile();
+    // 粒子數依裝置檔次縮放：十連的十發爆點在弱勢手機上是連續的發熱尖峰
+    const n = (count: number) => Math.max(1, Math.round(count * profile.particleScale));
+
     let ctx: CanvasRenderingContext2D | null = null;
     let w = 0;
     let h = 0;
-    let raf = 0;
-    let running = false;
+    let stopLoop: (() => void) | null = null;
     let disposed = false;
-    let last = 0;
 
     const rings: Ring[] = [];
     const shards: Shard[] = [];
@@ -205,7 +208,7 @@ export const RevealFx = forwardRef<
       }
 
       // 倒吸火星：從四周朝命中點衝，無重力、低衰減
-      for (let i = 0; i < 22 + fx.tier * 24; i++) {
+      for (let i = 0; i < n(22 + fx.tier * 24); i++) {
         const a = Math.random() * Math.PI * 2;
         const rad = 250 + Math.random() * 330;
         const sp = 760 + Math.random() * 900;
@@ -223,11 +226,7 @@ export const RevealFx = forwardRef<
         });
       }
 
-      if (!running) {
-        running = true;
-        last = performance.now();
-        raf = requestAnimationFrame(frame);
-      }
+      ensureRunning();
     };
 
     api.current.burst = (x, y, rarity) => {
@@ -265,7 +264,7 @@ export const RevealFx = forwardRef<
       }
 
       // 晶粒碎片：帶 z 的方塊，往外炸開後受重力落下
-      for (let i = 0; i < fx.shards; i++) {
+      for (let i = 0; i < n(fx.shards); i++) {
         const a = Math.random() * Math.PI * 2;
         const sp = 220 + Math.random() * 620 + fx.tier * 90;
         shards.push({
@@ -285,7 +284,7 @@ export const RevealFx = forwardRef<
       }
 
       // 火星：細長拖尾，速度衰減
-      for (let i = 0; i < fx.sparks; i++) {
+      for (let i = 0; i < n(fx.sparks); i++) {
         const a = Math.random() * Math.PI * 2;
         const sp = 300 + Math.random() * 1100 + fx.tier * 160;
         sparks.push({
@@ -315,7 +314,7 @@ export const RevealFx = forwardRef<
       // 鏡頭光斑（水平變形光條）＋ 金塵飄落：SSR 專屬
       if (fx.tier >= 3) {
         flares.push({ x, y, t: 0, life: 1.5, color: fx.spark, power: 1 });
-        for (let i = 0; i < 90; i++) {
+        for (let i = 0; i < n(90); i++) {
           motes.push({
             x: x + (Math.random() - 0.5) * 460,
             y: y + (Math.random() - 0.5) * 340,
@@ -336,12 +335,14 @@ export const RevealFx = forwardRef<
       }
       shake(fx.shake);
 
-      if (!running) {
-        running = true;
-        last = performance.now();
-        raf = requestAnimationFrame(frame);
-      }
+      ensureRunning();
     };
+
+    // 只在有東西可畫時才跑迴圈；畫完自己收工，不留背景常駐的 rAF
+    function ensureRunning() {
+      if (stopLoop || disposed) return;
+      stopLoop = startFrameLoop({ fps: () => profile.burstFps, draw: frame });
+    }
 
     function step<T extends { t: number; life: number }>(arr: T[], dt: number) {
       for (let i = arr.length - 1; i >= 0; i--) {
@@ -350,10 +351,9 @@ export const RevealFx = forwardRef<
       }
     }
 
-    function frame(now: number) {
+    function frame(now: number, rawDt: number) {
       if (disposed || !ctx) return;
-      const dt = Math.min((now - last) / 1000, 0.04);
-      last = now;
+      const dt = Math.min(rawDt, 0.04);
       const c = ctx;
       c.clearRect(0, 0, w, h);
       c.globalCompositeOperation = "lighter";
@@ -479,9 +479,9 @@ export const RevealFx = forwardRef<
       step(pillars, dt);
       step(flares, dt);
 
-      if (alive()) raf = requestAnimationFrame(frame);
-      else {
-        running = false;
+      if (!alive()) {
+        stopLoop?.();
+        stopLoop = null;
         c.clearRect(0, 0, w, h);
       }
     }
@@ -490,7 +490,8 @@ export const RevealFx = forwardRef<
     window.addEventListener("resize", onResize);
     return () => {
       disposed = true;
-      cancelAnimationFrame(raf);
+      stopLoop?.();
+      stopLoop = null;
       window.removeEventListener("resize", onResize);
     };
   }, [theme, low, shakeTarget]);
