@@ -1,10 +1,10 @@
-import { getActivePools } from "@/lib/pool/query";
+import { getActivePoolsWithRarity } from "@/lib/pool/query";
 
 export const dynamic = "force-dynamic";
 
 // 企劃書 18 機率揭露頁（alpha：僅板塊池；全市場池與精選池 beta 開放）
 export default async function OddsPage() {
-  const pools = await getActivePools();
+  const pools = await getActivePoolsWithRarity();
 
   return (
     <div className="flex flex-col gap-6">
