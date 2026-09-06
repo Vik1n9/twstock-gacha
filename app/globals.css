@@ -319,7 +319,22 @@ body {
 }
 
 .card-back-sigil {
+  transform-origin: center;
+  transform-box: fill-box;
   animation: sigil-pulse 2.2s ease-in-out infinite;
+}
+
+/* 徽記外圈的旋轉刻度環（正向／反向一對） */
+.card-back-ring {
+  transform-origin: center;
+  transform-box: fill-box;
+  animation: rar-rotate 16s linear infinite;
+}
+
+.card-back-ring-rev {
+  transform-origin: center;
+  transform-box: fill-box;
+  animation: rar-rotate 24s linear infinite reverse;
 }
 
 @keyframes sigil-pulse {
@@ -418,6 +433,8 @@ body {
   .rar-SSR.card-holo::before,
   .card-back-holo,
   .card-back-sigil,
+  .card-back-ring,
+  .card-back-ring-rev,
   .text-glitch::before,
   .text-glitch::after {
     animation: none;
