@@ -47,29 +47,13 @@ Dashboard → `twstock-gacha` → Settings → Git，二擇一：
 
 ---
 
-## 3. D1 索引 migration
+## 3. ~~D1 索引 migration~~ — ✅ 已完成（2026-09-06）
 
-**現況**：PR #9 已合併，但**遠端 D1 尚未套用**。不影響正確性，只影響查詢計畫
-（抽卡取「某池最新開放快照」會從索引搜尋退回掃描，成本隨快照歷史線性成長）。
+`wrangler d1 execute --remote --file ./drizzle/0001_pool-snapshots-pool-idx.sql` 已套用，
+`EXPLAIN QUERY PLAN` 驗證：
 
-```bash
-git pull origin main
-npx wrangler d1 execute twstock-gacha --remote --yes \
-  --file ./drizzle/0001_pool-snapshots-pool-idx.sql
 ```
-
-不想拉檔案的話，內容只有一句：
-
-```bash
-npx wrangler d1 execute twstock-gacha --remote --yes \
-  --command "CREATE INDEX \`pool_snapshots_pool_idx\` ON \`pool_snapshots\` (\`pool_id\`,\`snapshot_date\`);"
-```
-
-驗證（應出現 `SEARCH ... USING INDEX pool_snapshots_pool_idx (pool_id=?)`，而非 `SCAN`）：
-
-```bash
-npx wrangler d1 execute twstock-gacha --remote --yes \
-  --command "EXPLAIN QUERY PLAN SELECT * FROM pool_snapshots WHERE pool_id='POOL_ALL' AND is_open=1 ORDER BY snapshot_date DESC LIMIT 1;"
+SEARCH pool_snapshots USING INDEX pool_snapshots_pool_idx (pool_id=?)
 ```
 
 ---
@@ -83,26 +67,22 @@ npx wrangler d1 execute twstock-gacha --remote --yes \
 
 ---
 
-## 5. 清理已合併分支
+## 5. 清理已合併分支 — 部分完成（2026-09-06）
 
-做完第 1 項後再刪 `cloudflare-d1`。
+已刪除（逐一以 `git merge-base --is-ancestor` 重新驗證過已併入 `main`）：
 
-```bash
-git push origin --delete cloudflare-d1
-git push origin --delete claude/jump-animation-trigger-t5x4mc
-git push origin --delete claude/mobile-overheating-issue-tfqwiv
-git push origin --delete claude/webpage-load-performance-tj0i8z
-git push origin --delete claude/cloudflare-deployment-check-2pokfj
-```
+- ~~`claude/jump-animation-trigger-t5x4mc`~~
+- ~~`claude/mobile-overheating-issue-tfqwiv`~~
+- ~~`claude/webpage-load-performance-tj0i8z`~~
+- ~~`claude/cloudflare-deployment-check-2pokfj`~~
 
-以上五條都已完整併入 `main`（逐一以 `git merge-base --is-ancestor` 驗證過），刪除不會遺失任何 commit。
+**待處理**：
 
-**`claude/happy-lamport-62xqyi` 例外**：它有一個 main 沒有的 commit `04cd9e9`
-（Postgres 時代的「DB client 延遲連線」修正，含一個已不適用的 `lib/db/client.test.ts`）。
-該修正後來被 main 的 `c28e73f` 取代，再被目前的 `getDb()` 取代，功能上已無價值。
-確認後可一併刪除，但它不是單純的「已合併分支」。
-
-**保留 `archive/vercel-neon`** — 那是 Vercel + Neon 版本的唯一存放處。
+- `cloudflare-d1`：**先做完第 1 項**（Workers Git 整合改追蹤 `main`）再刪，否則整合指向不存在的分支
+- `claude/happy-lamport-62xqyi`：有一個 main 沒有的 commit `04cd9e9`
+  （Postgres 時代的「DB client 延遲連線」修正）。該問題已由現行 `getDb()`（D1 雙模式）
+  以不同方式解決，功能上已無價值——確認後可刪
+- `archive/vercel-neon`：**保留**，是 Vercel + Neon 版本的唯一存放處
 
 ---
 
