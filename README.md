@@ -58,7 +58,8 @@ cp .env.example .env.local     # 填入 CLOUDFLARE_ACCOUNT_ID / CLOUDFLARE_D1_DA
 npm run db:generate            # schema 異動時產生 migration SQL（drizzle-kit generate）
 npx wrangler d1 execute twstock-gacha --local --file ./drizzle/0000_init-d1.sql --yes  # 本機 D1 建表
 npm run seed                   # 16 板塊 + 全市場池 + 上市普通股 + 板塊映射（經 D1 HTTP API）
-npm run backfill               # 回填 60 日曆天收盤價 + 計算漲跌幅
+npm run backfill               # 回填 60 日曆天收盤價（結束後統一算一次 change1d）
+npm run recompute              # 手動重算 change1d（校正用，可 --from / --to）
 npm run snapshot               # 生成最新交易日快照（可 --date YYYY-MM-DD）
 npm run dev                    # http://localhost:3001（vinext dev）
 npm run build                  # Vite 多環境建置（client + RSC + SSR）
@@ -139,6 +140,28 @@ SSR 昇格（`big`）每一段都再加碼：多屏息一拍、字母更大、�
 前置演出**不是固定長度**：時間軸在 1.70s 有一道閘門，抽卡結果還沒回來就停在滿蓄力等待
 （上限 6s），演完才由 `onDone` 通知上層進入翻牌。沒有這道閘門的話，Neon 免費方案限流時
 `/api/draw` 動輒數秒，稀有度預告與整段昇格演出都會被跳過。
+
+## 寫入量與 D1 配額
+
+D1 免費方案每日寫入上限 100,000 列（[官方定價](https://developers.cloudflare.com/d1/platform/pricing/)），
+超過後**讀取仍正常、所有寫入失敗**——表現為頁面看得到但抽卡回 500（`draw_records` 寫不進去）。
+因此每日流程刻意壓低寫入量：
+
+| 動作 | 寫入列數 |
+|---|---:|
+| 每日 cron：收盤入庫 | 約 1,100（該日一次） |
+| 每日 cron：重算 change1d | 約 1,100（**只算當日**） |
+| 每日 cron：快照明細 | 約 2,100 |
+| `npm run backfill --days 60` | 約 65,000（結束後只重算一次） |
+
+兩個設計上的取捨：
+
+- `change1d` **只重算當次匯入的那一天**。前一天的值在前一天就算過了，不必重算。
+  （先前是無界的全表 UPDATE 且每匯入一天跑一次：每日 cron 約 64,000 列並隨歷史成長，
+  backfill 60 天約 200 萬列——這正是配額被用盡的原因。）
+- 收盤資料**該日已完整入庫就不重抓重寫**。`findLastTradingDay()` 找不到當日資料時會往回退，
+  否則每次都會把前一交易日重寫一遍。
+- 需要回頭校正歷史資料時，用 `npm run recompute -- --from ... --to ...` 明確觸發，不放進排程。
 
 ## 資料載入分層
 
