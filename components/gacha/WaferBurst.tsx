@@ -256,7 +256,7 @@ export function WaferBurst({
         doneRef.current?.();
       }
     };
-    const stopLoop = startFrameLoop({ fps: () => profile.fps, draw: loop });
+    const stopLoop = startFrameLoop({ fps: () => profile.burstFps, draw: loop });
 
     const onResize = () => {
       const r = fitCanvas(canvas);

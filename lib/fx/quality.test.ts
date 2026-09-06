@@ -98,6 +98,7 @@ describe("profileFor", () => {
       expect(p[i].godRays).toBeGreaterThanOrEqual(p[i - 1].godRays);
       expect(p[i].fps).toBeGreaterThanOrEqual(p[i - 1].fps);
       expect(p[i].idleFps).toBeGreaterThanOrEqual(p[i - 1].idleFps);
+      expect(p[i].burstFps).toBeGreaterThanOrEqual(p[i - 1].burstFps);
     }
   });
 
@@ -105,6 +106,46 @@ describe("profileFor", () => {
     for (const t of tiers) {
       const p = profileFor(t);
       expect(p.idleFps).toBeLessThan(p.fps);
+    }
+  });
+
+  it("短暫的命中特效張數高於持續演出：發熱來自持續滿載，不是一兩秒的尖峰", () => {
+    for (const t of tiers) {
+      const p = profileFor(t);
+      expect(p.burstFps).toBeGreaterThanOrEqual(p.fps);
+    }
+  });
+
+  // 張數會被螢幕更新率量化（60Hz 只給得出 60/30/20/15），所以「比 fps 大」還不夠：
+  // burstFps 45 在 60Hz 螢幕上會退化成 30，與 fps 30 毫無差別，等於白設。
+  it("命中特效在 60Hz 螢幕上真的比持續演出快，而不是量化後退回同一格", () => {
+    // 完全比照 startFrameLoop 的判斷（含 2ms 容差）：在 60Hz 螢幕上，
+    // 目標張數會被無條件進位到「每 k 幀畫一次」
+    const achievable = (target: number, refreshHz = 60) => {
+      const framePeriod = 1000 / refreshHz;
+      const k = Math.max(1, Math.ceil((1000 / target - 2) / framePeriod));
+      return refreshHz / k;
+    };
+    for (const t of tiers) {
+      const p = profileFor(t);
+      // 持續演出本來就已經是滿速的檔次（high），命中特效追平即可
+      if (p.fps >= 60) expect(achievable(p.burstFps)).toBe(achievable(p.fps));
+      else expect(achievable(p.burstFps)).toBeGreaterThan(achievable(p.fps));
+    }
+  });
+
+  it("mid 的 45fps 在 60Hz 螢幕上實得 30fps、在 120Hz 上實得 40fps", () => {
+    const achievable = (target: number, refreshHz: number) => {
+      const framePeriod = 1000 / refreshHz;
+      return refreshHz / Math.max(1, Math.ceil((1000 / target - 2) / framePeriod));
+    };
+    expect(achievable(45, 60)).toBe(30);
+    expect(achievable(45, 120)).toBe(40);
+  });
+
+  it("命中特效仍設有天花板，120Hz 螢幕不會讓工作量直接翻倍", () => {
+    for (const t of tiers) {
+      expect(profileFor(t).burstFps).toBeLessThanOrEqual(60);
     }
   });
 

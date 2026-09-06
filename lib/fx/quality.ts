@@ -22,10 +22,25 @@ export interface FxProfile {
   grain: boolean;
   /** 神光束數量 */
   godRays: number;
-  /** 演出中的張數上限 */
+  /**
+   * 持續演出（背景、前置蓄力）的張數上限。
+   *
+   * 注意張數會被螢幕更新率量化：只能每幀畫或每 N 幀畫一次，所以 60Hz 螢幕
+   * 實際可得的是 60/30/20/15，120Hz 是 120/60/40/30/24/20。45 在 60Hz 上等同
+   * 30、在 120Hz 上是 40——刻意如此，高更新率裝置通常也有較多散熱餘裕。
+   */
   fps: number;
   /** 無演出（結果頁停留）時的張數上限 */
   idleFps: number;
+  /**
+   * 一兩秒就結束的命中特效（翻牌爆點、SSR 簽名）張數上限。
+   *
+   * 三檔一律 60：發熱來自「持續」滿載，不是短暫尖峰，而這幾秒正是整個遊戲的
+   * 情緒高點，為了省一點點熱量把它壓成 30fps 並不划算。這裡不是「不設限」——
+   * 60 仍然擋掉 120Hz 螢幕的工作量翻倍；而弱勢裝置本來就跑不到 60，天花板拉高
+   * 不會讓它多花力氣。
+   */
+  burstFps: number;
 }
 
 const PROFILES: Record<FxTier, FxProfile> = {
@@ -38,6 +53,7 @@ const PROFILES: Record<FxTier, FxProfile> = {
     godRays: 2,
     fps: 30,
     idleFps: 20,
+    burstFps: 60,
   },
   mid: {
     tier: "mid",
@@ -48,6 +64,7 @@ const PROFILES: Record<FxTier, FxProfile> = {
     godRays: 3,
     fps: 45,
     idleFps: 24,
+    burstFps: 60,
   },
   high: {
     tier: "high",
@@ -58,6 +75,7 @@ const PROFILES: Record<FxTier, FxProfile> = {
     godRays: 5,
     fps: 60,
     idleFps: 30,
+    burstFps: 60,
   },
 };
 

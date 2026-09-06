@@ -341,7 +341,7 @@ export const RevealFx = forwardRef<
     // 只在有東西可畫時才跑迴圈；畫完自己收工，不留背景常駐的 rAF
     function ensureRunning() {
       if (stopLoop || disposed) return;
-      stopLoop = startFrameLoop({ fps: () => profile.fps, draw: frame });
+      stopLoop = startFrameLoop({ fps: () => profile.burstFps, draw: frame });
     }
 
     function step<T extends { t: number; life: number }>(arr: T[], dt: number) {
