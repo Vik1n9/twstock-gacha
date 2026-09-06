@@ -64,7 +64,8 @@ npx tsx scripts/verify-odds.ts [-- --pool POOL_AI]  # 對真實快照模擬 30 �
 ## 部署（Vercel + Neon）
 
 1. [Neon](https://neon.tech) 建專案，取得 pooled connection string。
-2. Vercel 匯入本 repo，設定環境變數：
+2. Vercel 匯入本 repo，設定環境變數（**Production 與 Preview 兩個環境都要設**，
+   否則 PR 的 preview 部署會連不到資料庫）：
    - `DATABASE_URL`＝Neon 連線字串（含 `?sslmode=require`）
    - `CRON_SECRET`＝自訂密鑰（Vercel Cron 會自動以 Bearer 送出）
 3. `npx drizzle-kit push`（本機 `.env.local` 改指向 Neon 後執行）→ `npm run seed` → `npm run backfill`。
