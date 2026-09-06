@@ -3,19 +3,23 @@
 import { useEffect, useMemo, useRef } from "react";
 import gsap from "gsap";
 import type { SectorTheme } from "@/lib/sectors/defs";
-import type { Rarity } from "@/lib/fx/core";
+import type { Rarity, RarityFx } from "@/lib/fx/core";
 import { RARITY_FX, fitCanvas, mulberry32, rgba } from "@/lib/fx/core";
 
 // 抽卡前置演出（企劃書 13.1 五步驟的電影化版本）
 // 快門開場 → 徽章碎片組裝 → 板塊名故障感切入 → 3D 代號滾筒 → 能量匯聚蓄力 → 白閃交棒
 // hint：抽卡結果先回來時，用最高稀有度預告改變蓄力顏色（經典「彩光預告」）
+// jumpFrom：跳變前兆——先以低階色蓄力預告，於 2.0s 前後「撕裂跳升」為結果色
+// （tease 1.78s 低階色＋內吸 surge 0.5 → jump 2.02s 色域跳升＋白閃＋徽章 punch＋中央爆點）
 export function PreRoll({
   theme,
   boardName,
   stockCodes,
   low,
   hint = null,
+  jumpFrom = null,
   onBoost,
+  onJump,
   onDone,
 }: {
   theme: SectorTheme;
@@ -23,7 +27,9 @@ export function PreRoll({
   stockCodes: string[];
   low: boolean;
   hint?: Rarity | null;
+  jumpFrom?: "R" | "SR" | null;
   onBoost?: (v: number) => void;
+  onJump?: (rarity: Rarity) => void;
   onDone: () => void;
 }) {
   const rootRef = useRef<HTMLDivElement>(null);
@@ -36,13 +42,17 @@ export function PreRoll({
   const drumRef = useRef<HTMLDivElement>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const flashRef = useRef<HTMLDivElement>(null);
-  const cb = useRef({ onDone, onBoost });
+  const cb = useRef({ onDone, onBoost, onJump });
   const hintRef = useRef<Rarity | null>(hint);
+  const jumpFromRef = useRef<"R" | "SR" | null>(jumpFrom ?? null);
+  // 跳變時由時間軸控制粒子顯示色（低階 → 高階）；surge 為粒子內吸強度脈衝
+  const shownFxRef = useRef<Rarity | null>(null);
+  const surgeRef = useRef(0);
 
   useEffect(() => {
-    cb.current = { onDone, onBoost };
-    hintRef.current = hint;
-  }, [onDone, onBoost, hint]);
+    cb.current = { onDone, onBoost, onJump };
+    jumpFromRef.current = jumpFrom ?? null;
+  }, [onDone, onBoost, onJump, jumpFrom]);
 
   // 3D 代號滾筒：把股票代號貼在一圈圓柱面上
   const drumFaces = useMemo(() => {
@@ -93,9 +103,19 @@ export function PreRoll({
       last = now;
       const t = (now - start) / 1000;
       const ramp = Math.min(1, t / 2.2);
-      const hintFx = hintRef.current ? RARITY_FX[hintRef.current] : null;
-      const hot = hintFx && hintFx.tier >= 2 ? hintFx.color : theme.accent;
-      const cool = hintFx && hintFx.tier >= 2 ? hintFx.spark : theme.primary;
+      // surge：時間軸在 tease/jump 瞬間注入的內吸脈衝，幀間指數衰減
+      const surge = surgeRef.current;
+      surgeRef.current = surge > 0.001 ? surge * Math.pow(0.25, dt) : 0;
+      // 跳變時顯示色由時間軸逐步切換（低階 → 高階）；無跳變維持「hint 即染色」
+      let fxs: RarityFx | null = null;
+      if (shownFxRef.current) {
+        fxs = RARITY_FX[shownFxRef.current];
+      } else if (!jumpFromRef.current) {
+        const hintFx = hintRef.current ? RARITY_FX[hintRef.current] : null;
+        if (hintFx && hintFx.tier >= 2) fxs = hintFx;
+      }
+      const hot = fxs ? fxs.color : theme.accent;
+      const cool = fxs ? fxs.spark : theme.primary;
       const cx = w / 2;
       const cy = h / 2;
 
@@ -103,7 +123,7 @@ export function PreRoll({
       ctx.globalCompositeOperation = "lighter";
 
       for (const p of ps) {
-        p.r -= p.v * (0.6 + ramp * 2.4) * dt;
+        p.r -= (p.v * (0.6 + ramp * 2.4) + surge * 1300) * dt;
         p.a += p.spin * dt * (0.6 + ramp);
         if (p.r < 26) Object.assign(p, spawn());
         const x = cx + Math.cos(p.a) * p.r;
@@ -112,7 +132,10 @@ export function PreRoll({
         const x2 = cx + Math.cos(p.a) * (p.r + tail);
         const y2 = cy + Math.sin(p.a) * (p.r + tail) * 0.78;
         const fade = Math.max(0, 1 - p.r / (Math.max(w, h) * 0.7));
-        ctx.strokeStyle = rgba(p.accent ? hot : cool, (0.15 + fade * 0.75) * (0.35 + ramp * 0.65));
+        ctx.strokeStyle = rgba(
+          p.accent ? hot : cool,
+          Math.min(1, (0.15 + fade * 0.75) * (0.35 + ramp * 0.65) * (1 + surge)),
+        );
         ctx.lineWidth = p.size;
         ctx.beginPath();
         ctx.moveTo(x, y);
@@ -120,11 +143,11 @@ export function PreRoll({
         ctx.stroke();
       }
 
-      // 中央蓄能核心
-      const core = 26 + ramp * 76 + Math.sin(t * 14) * (2 + ramp * 8);
+      // 中央蓄能核心（surge 時膨脹發亮：能量被「抽」進來的爆發感）
+      const core = 26 + ramp * 76 + Math.sin(t * 14) * (2 + ramp * 8) + surge * 120;
       const g = ctx.createRadialGradient(cx, cy, 0, cx, cy, core);
-      g.addColorStop(0, rgba("#ffffff", 0.55 * ramp));
-      g.addColorStop(0.35, rgba(hot, 0.5 * ramp));
+      g.addColorStop(0, rgba("#ffffff", Math.min(1, 0.55 * ramp * (1 + surge * 0.8))));
+      g.addColorStop(0.35, rgba(hot, Math.min(1, 0.5 * ramp * (1 + surge * 0.8))));
       g.addColorStop(1, rgba(hot, 0));
       ctx.fillStyle = g;
       ctx.fillRect(cx - core, cy - core, core * 2, core * 2);
@@ -132,7 +155,7 @@ export function PreRoll({
       // 旋轉符文環
       for (let i = 0; i < 3; i++) {
         const rr = 120 + i * 54 - ramp * 26;
-        ctx.strokeStyle = rgba(i % 2 ? cool : hot, 0.16 + ramp * 0.4);
+        ctx.strokeStyle = rgba(i % 2 ? cool : hot, Math.min(1, (0.16 + ramp * 0.4) * (1 + surge * 0.5)));
         ctx.lineWidth = 1 + i * 0.5;
         ctx.setLineDash([i === 1 ? 6 : 16, 14 + i * 8]);
         ctx.lineDashOffset = (i % 2 ? -1 : 1) * t * (60 + ramp * 320);
@@ -240,6 +263,8 @@ export function PreRoll({
     tl.call(() => cb.current.onBoost?.(0.25), undefined, 0.2)
       .call(() => cb.current.onBoost?.(0.5), undefined, 1.3)
       .call(() => {
+        // 跳變流程接管染色（見下方 tease/jump 兩段）
+        if (jumpFromRef.current) return;
         // 已知結果時，稀有度預告把整層染成對應色
         const h = hintRef.current;
         const fx = h ? RARITY_FX[h] : null;
@@ -256,6 +281,56 @@ export function PreRoll({
           );
         }
       }, undefined, 2.0);
+
+    // 跳變前兆（1.78s）：整層「降階」為低階色蓄力，粒子開始內吸（surge 0.5）
+    tl.call(() => {
+      const jf = jumpFromRef.current;
+      if (!jf) return;
+      const lfx = RARITY_FX[jf];
+      shownFxRef.current = jf;
+      surgeRef.current = 0.5;
+      cb.current.onBoost?.(0.8);
+      if (rootRef.current) {
+        gsap.to(rootRef.current, {
+          "--fx-hint": lfx.color,
+          duration: 0.18,
+        } as gsap.TweenVars);
+      }
+      gsap.fromTo(
+        flashRef.current,
+        { autoAlpha: 0, backgroundColor: lfx.spark },
+        { autoAlpha: 0.22, duration: 0.14, yoyo: true, repeat: 1 },
+      );
+    }, undefined, 1.78);
+
+    // 跳變（2.02s）：色域撕裂跳升——低階色瞬間轉為結果色＋白閃＋徽章 punch＋中央爆點
+    tl.call(() => {
+      const jf = jumpFromRef.current;
+      const h = hintRef.current;
+      if (!jf || !h) return;
+      const ffx = RARITY_FX[h];
+      shownFxRef.current = h;
+      surgeRef.current = 1;
+      cb.current.onBoost?.(1);
+      if (rootRef.current) {
+        gsap.to(rootRef.current, {
+          "--fx-hint": ffx.color,
+          duration: 0.22,
+          ease: "power4.in",
+        } as gsap.TweenVars);
+      }
+      gsap.fromTo(
+        flashRef.current,
+        { autoAlpha: 0, backgroundColor: "#ffffff" },
+        { autoAlpha: 0.85, duration: 0.1, yoyo: true, repeat: 1 },
+      );
+      gsap.fromTo(
+        badgeRef.current,
+        { scale: 1 },
+        { scale: 1.18, duration: 0.14, yoyo: true, repeat: 1, ease: "power2.inOut" },
+      );
+      cb.current.onJump?.(h);
+    }, undefined, 2.02);
 
     // 收場：整層被白光吞掉
     tl.to(

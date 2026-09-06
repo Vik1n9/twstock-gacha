@@ -111,19 +111,6 @@ export const RARITY_LINE: Record<Rarity, string> = {
   SSR: "#A85416",
 };
 
-// 稀有度演出參數：越高階，光更亮、粒子更多、鏡頭更用力
-export interface RarityFx {
-  color: string;
-  spark: string;
-  tier: 0 | 1 | 2 | 3;
-  rings: number;
-  shards: number;
-  sparks: number;
-  flash: number; // 全屏閃白強度 0..1
-  shake: number; // 鏡頭震動像素
-  hold: number; // 定格時間 ms
-}
-
 export const RARITY_FX: Record<Rarity, RarityFx> = {
   C: {
     color: RARITY_COLOR.C,

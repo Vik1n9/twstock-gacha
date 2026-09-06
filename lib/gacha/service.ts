@@ -22,6 +22,7 @@ export interface DrawCard {
   change1d: number | null;
   change30d: number;
   boardName: string | null; // 該卡主板塊（企劃書 11；全市場池逐卡板塊不同）
+  jumpFrom: "R" | "SR" | null; // 跳變演出標記（純展示，不入 drawRecords）
 }
 
 export interface DrawOutcome {
@@ -136,6 +137,13 @@ export async function draw(
       boardName: row.boardCode
         ? (boardNames.get(row.boardCode) ?? null)
         : (board?.tagName ?? null),
+      // 跳變演出標記（純展示）：SR 結果 1/10 以 R 蓄力登場、SSR 結果 1/10 以 SR 蓄力登場
+      jumpFrom:
+        r.finalRarity === "SR" && Math.random() < 0.1
+          ? "R"
+          : r.finalRarity === "SSR" && Math.random() < 0.1
+            ? "SR"
+            : null,
     };
   });
 

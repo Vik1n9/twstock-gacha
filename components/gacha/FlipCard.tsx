@@ -10,7 +10,9 @@ import { RARITY_FX } from "@/lib/fx/core";
 
 // 翻牌容器（真 3D）：
 // 遠處飛入 → 高稀有度蓄力抖動 → 帶弧線的 rotationY 翻轉 → 落定回彈 → 稀有度光暈常駐
-// 翻開瞬間回呼 onImpact(螢幕座標, 稀有度)，由 RevealFx 在上層丟爆點。
+// 翻開瞬間回呼 onImpact(螢幕座標, 稀有度, jumpFrom)，由 RevealFx 在上層丟爆點。
+// 跳變卡（card.jumpFrom）：蓄力光暈先以低階色預告（藍→紫／紫→橘的前兆），
+// 翻轉起手瞬間低階光暈退場＋低階色閃刷，交棒給結果色；爆點由上層做兩段式。
 export function FlipCard({
   card,
   theme,
@@ -29,15 +31,24 @@ export function FlipCard({
   delay?: number;
   low?: boolean;
   onFlipped?: () => void;
-  onImpact?: (x: number, y: number, rarity: DrawCard["rarity"]) => void;
+  onImpact?: (
+    x: number,
+    y: number,
+    rarity: DrawCard["rarity"],
+    jumpFrom?: DrawCard["jumpFrom"],
+  ) => void;
   interactive?: boolean;
 }) {
   const wrapRef = useRef<HTMLDivElement>(null);
   const tiltRef = useRef<HTMLDivElement>(null);
   const innerRef = useRef<HTMLDivElement>(null);
   const auraRef = useRef<HTMLDivElement>(null);
+  const jumpAuraRef = useRef<HTMLDivElement>(null);
+  const jumpFlashRef = useRef<HTMLDivElement>(null);
   const ringRef = useRef<HTMLDivElement>(null);
   const cbRef = useRef({ onFlipped, onImpact });
+  const jumpFrom = card.jumpFrom ?? null;
+  const lfx = jumpFrom ? RARITY_FX[jumpFrom] : null;
 
   useEffect(() => {
     cbRef.current = { onFlipped, onImpact };
@@ -48,6 +59,8 @@ export function FlipCard({
     const tilt = tiltRef.current;
     const wrap = wrapRef.current;
     const aura = auraRef.current;
+    const jumpAura = jumpAuraRef.current;
+    const jumpFlash = jumpFlashRef.current;
     const ring = ringRef.current;
     if (!inner || !tilt || !wrap) return;
 
@@ -63,7 +76,12 @@ export function FlipCard({
 
     const fireImpact = () => {
       const r = wrap.getBoundingClientRect();
-      cbRef.current.onImpact?.(r.left + r.width / 2, r.top + r.height / 2, card.rarity);
+      cbRef.current.onImpact?.(
+        r.left + r.width / 2,
+        r.top + r.height / 2,
+        card.rarity,
+        jumpFrom ?? undefined,
+      );
     };
 
     const tl = gsap.timeline({ delay });
@@ -84,9 +102,10 @@ export function FlipCard({
     );
 
     // 2) 高稀有度蓄力：卡背抖動 + 光暈爬升（把期待感撐開）
+    //    跳變卡：蓄力光暈改用低階色（前兆），翻轉起手才交棒給結果色
     if (fx.tier >= 2) {
       tl.to(
-        aura,
+        jumpFrom && jumpAura ? jumpAura : aura,
         { autoAlpha: 0.9, scale: 1.35, duration: 0.5, ease: "power2.in" },
         "-=0.15",
       ).to(
@@ -114,6 +133,22 @@ export function FlipCard({
       duration: 0.72,
       ease: "power2.inOut",
       onStart: () => {
+        // 跳變交棒：低階光暈退場、低階色閃刷過卡背（色域撕裂的前兆收尾）
+        if (jumpFrom && jumpAura) {
+          gsap.to(jumpAura, {
+            autoAlpha: 0,
+            scale: 1.6,
+            duration: 0.25,
+            ease: "power2.out",
+          });
+        }
+        if (jumpFrom && jumpFlash) {
+          gsap.fromTo(
+            jumpFlash,
+            { autoAlpha: 0, scaleY: 0.3 },
+            { autoAlpha: 0.5, scaleY: 1, duration: 0.11, yoyo: true, repeat: 1, ease: "power2.in" },
+          );
+        }
         gsap.to(inner, {
           z: size * 0.9,
           rotationX: -12,
@@ -166,7 +201,7 @@ export function FlipCard({
       tl.kill();
       gsap.killTweensOf([inner, tilt, aura, ring]);
     };
-  }, [low, delay, card.rarity, size]);
+  }, [low, delay, card.rarity, jumpFrom, size]);
 
   // 指標傾斜：滑過卡片時做出實體卡的視差與反光
   useEffect(() => {
@@ -227,6 +262,20 @@ export function FlipCard({
         }}
       />
 
+      {/* 跳變前兆光暈（低階色，蓄力期代替結果色光暈） */}
+      <div
+        ref={jumpAuraRef}
+        className="pointer-events-none absolute -inset-6 opacity-0"
+        style={
+          lfx
+            ? {
+                background: `radial-gradient(closest-side, ${lfx.color}, transparent 72%)`,
+                filter: `blur(${10 + lfx.tier * 8}px)`,
+              }
+            : undefined
+        }
+      />
+
       {/* 翻開瞬間的擴散光環（在卡片後方，避免蓋住卡面） */}
       <div
         ref={ringRef}
@@ -271,6 +320,16 @@ export function FlipCard({
               }}
             />
           </div>
+          {/* 跳變撕裂閃刷：翻轉起手瞬間以低階色刷過卡背（與卡片同層傾斜） */}
+          <div
+            ref={jumpFlashRef}
+            className="pointer-events-none absolute inset-0 z-10 rounded-[14px] opacity-0 mix-blend-screen"
+            style={
+              lfx
+                ? { background: `linear-gradient(155deg, ${lfx.color}, ${lfx.spark})` }
+                : undefined
+            }
+          />
         </div>
       </div>
 

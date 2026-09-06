@@ -83,6 +83,8 @@ export function GachaStage({ pools }: { pools: PoolInfo[] }) {
   const [busy, setBusy] = useState(false);
   const [boost, setBoost] = useState(0);
   const [hint, setHint] = useState<Rarity | null>(null);
+  // 跳變演出：結果含 jumpFrom 標記的最高稀有卡時，前置演出先以低階色蓄力再跳升
+  const [jumpFrom, setJumpFrom] = useState<"R" | "SR" | null>(null);
   const [detail, setDetail] = useState<CardDetailData | null>(null);
   const [low] = useLowFx();
   // 企劃書 12.1：玩家可選擇卡池（記住上次選擇；未選時預設全市場池）
@@ -108,13 +110,27 @@ export function GachaStage({ pools }: { pools: PoolInfo[] }) {
   // 企劃書 13.1 步驟 4：板塊內股票代號快速流動（演出用範例碼）
   const tickerCodes = ["2330", "2303", "2454", "3034", "2308", "2408", "6770", "3711", "6509", "8081"];
 
-  const impact = useCallback((x: number, y: number, rarity: Rarity) => {
-    fxRef.current?.burst(x, y, rarity);
-    // 高稀有度翻開時，背景跟著往上推一段
-    if (RARITY_RANK[rarity] >= 2) {
-      setBoost(RARITY_RANK[rarity] >= 3 ? 1 : 0.7);
-      setTimeout(() => setBoost(0.28), 700);
-    }
+  const impact = useCallback(
+    (x: number, y: number, rarity: Rarity, jumpFrom?: "R" | "SR" | null) => {
+      // 跳變兩段式爆點：先低階色小爆，短暫停頓後結果色正式爆開
+      if (jumpFrom) {
+        fxRef.current?.burst(x, y, jumpFrom);
+        setTimeout(() => fxRef.current?.burst(x, y, rarity), low ? 90 : 170);
+      } else {
+        fxRef.current?.burst(x, y, rarity);
+      }
+      // 高稀有度翻開時，背景跟著往上推一段
+      if (RARITY_RANK[rarity] >= 2) {
+        setBoost(RARITY_RANK[rarity] >= 3 ? 1 : 0.7);
+        setTimeout(() => setBoost(0.28), 700);
+      }
+    },
+    [low],
+  );
+
+  // PreRoll 跳變瞬間：畫面中央先炸一發結果色（RevealFx 層在前置演出之上）
+  const fireJump = useCallback((rarity: Rarity) => {
+    fxRef.current?.burst(window.innerWidth / 2, window.innerHeight / 2, rarity);
   }, []);
 
   const start = useCallback(
@@ -124,6 +140,7 @@ export function GachaStage({ pools }: { pools: PoolInfo[] }) {
       setError(null);
       setOutcome(null);
       setHint(null);
+      setJumpFrom(null);
       setDrawType(type);
       setPhase("preroll");
       setBoost(0.18);
@@ -131,8 +148,15 @@ export function GachaStage({ pools }: { pools: PoolInfo[] }) {
       fxRef.current?.clear();
 
       const pending = fetchDraw(pool.poolId, type).then((r) => {
-        // 結果先回來 → 給前置演出稀有度預告（彩光預告）
-        if (r.ok) setHint(topRarity(r.data.cards));
+        // 結果先回來 → 給前置演出稀有度預告（彩光預告）＋跳變前兆標記
+        if (r.ok) {
+          const top = topRarity(r.data.cards);
+          setHint(top);
+          setJumpFrom(
+            r.data.cards.find((c) => c.rarity === top && c.jumpFrom)?.jumpFrom ??
+              null,
+          );
+        }
         return r;
       });
 
@@ -159,6 +183,7 @@ export function GachaStage({ pools }: { pools: PoolInfo[] }) {
     setDetail(null);
     setBoost(0);
     setHint(null);
+    setJumpFrom(null);
     fxRef.current?.clear();
   };
 
@@ -337,7 +362,9 @@ export function GachaStage({ pools }: { pools: PoolInfo[] }) {
               stockCodes={tickerCodes}
               low={low}
               hint={hint}
+              jumpFrom={jumpFrom}
               onBoost={setBoost}
+              onJump={fireJump}
               onDone={() => {
                 /* 演出長度由 start() 的 Promise.all 控制 */
               }}

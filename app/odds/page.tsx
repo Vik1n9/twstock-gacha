@@ -46,6 +46,24 @@ export default async function OddsPage() {
       </section>
 
       <section className="panel p-6">
+        <h2 className="mb-3 font-bold">跳變演出（僅效果，不影響機率）</h2>
+        <ul className="list-disc space-y-2 pl-5 text-sm leading-relaxed">
+          <li>
+            抽中 <b>SR</b> 時，有 1/10 機率以「R 蓄力 → 跳升 SR」的演出登場
+            （占全部抽卡約 0.4%）。
+          </li>
+          <li>
+            抽中 <b>SSR</b> 時，有 1/10 機率以「SR 蓄力 → 跳升 SSR」的演出登場
+            （占全部抽卡約 0.1%）。
+          </li>
+          <li>
+            跳變純為呈現效果：稀有度判定與入池紀錄均以實際結果為準，不會改變任何機率，
+            也不會影響保底或統計。
+          </li>
+        </ul>
+      </section>
+
+      <section className="panel p-6">
         <h2 className="mb-3 font-bold">空池處理規則</h2>
         <ol className="list-decimal space-y-2 pl-5 text-sm leading-relaxed">
           <li>抽中某方向與稀有度，但該池內無符合股票：維持原方向，稀有度降低一級重新確認，直至抽出。</li>

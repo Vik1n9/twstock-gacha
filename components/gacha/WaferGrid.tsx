@@ -31,7 +31,12 @@ export function WaferGrid({
   boardName: string | null;
   low: boolean;
   onDone: () => void;
-  onImpact?: (x: number, y: number, rarity: Rarity) => void;
+  onImpact?: (
+    x: number,
+    y: number,
+    rarity: Rarity,
+    jumpFrom?: "R" | "SR" | null,
+  ) => void;
   onBoost?: (v: number) => void;
 }) {
   const rootRef = useRef<HTMLDivElement>(null);

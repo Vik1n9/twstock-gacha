@@ -40,6 +40,9 @@ export interface DrawCard {
   change1d: number | null;
   change30d: number;
   boardName: string | null; // 該卡主板塊（板塊池＝池板塊；全市場池＝個股主板塊）
+  // 跳變演出標記（純展示，不入抽卡紀錄、不影響機率）：
+  // SR 結果 1/10 以「R」蓄力登場、SSR 結果 1/10 以「SR」蓄力登場
+  jumpFrom?: "R" | "SR" | null;
 }
 
 export interface DrawOutcome {
