@@ -6,7 +6,6 @@ import type { SectorTheme } from "@/lib/sectors/defs";
 import {
   RARITY_FX,
   type Rarity,
-  easeInCubic,
   easeOutCubic,
   easeOutQuint,
   fitCanvas,
@@ -18,9 +17,6 @@ import { fxProfile, startFrameLoop } from "@/lib/fx/quality";
 // 依稀有度分級：C 只有幾點火星，SSR 有衝擊波環＋光柱＋晶粒碎片＋金塵＋鏡頭光斑＋震動。
 export interface RevealFxHandle {
   burst: (x: number, y: number, rarity: Rarity) => void;
-  // 內爆收束：光環由外向內塌陷、火星倒吸進命中點。
-  // 跳變（昇格）時夾在「低階爆點」與「結果色爆點」中間，讀起來像低階結果被收走。
-  implode: (x: number, y: number, rarity: Rarity) => void;
   clear: () => void;
 }
 
@@ -34,7 +30,6 @@ interface Ring {
   width: number;
   color: string;
   squash: number;
-  inward?: boolean; // true＝由 r1 塌陷到 r0（內爆）
 }
 
 interface Shard {
@@ -102,13 +97,11 @@ export const RevealFx = forwardRef<
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const api = useRef<RevealFxHandle>({
     burst: () => {},
-    implode: () => {},
     clear: () => {},
   });
 
   useImperativeHandle(ref, () => ({
     burst: (x, y, rarity) => api.current.burst(x, y, rarity),
-    implode: (x, y, rarity) => api.current.implode(x, y, rarity),
     clear: () => api.current.clear(),
   }));
 
@@ -185,48 +178,6 @@ export const RevealFx = forwardRef<
       pillars.length = 0;
       flares.length = 0;
       flash = 0;
-    };
-
-    api.current.implode = (x, y, rarity) => {
-      if (low || !ctx) return;
-      const fx = RARITY_FX[rarity];
-
-      // 塌陷環：外圈先慢後快地收進命中點，越close越亮
-      for (let i = 0; i < 2 + fx.tier; i++) {
-        rings.push({
-          x,
-          y,
-          t: -i * 0.045,
-          life: 0.34,
-          r0: 8,
-          r1: 250 + i * 95,
-          width: 2.5 + i * 1.2,
-          color: i === 0 ? "#ffffff" : fx.color,
-          squash: 1,
-          inward: true,
-        });
-      }
-
-      // 倒吸火星：從四周朝命中點衝，無重力、低衰減
-      for (let i = 0; i < n(22 + fx.tier * 24); i++) {
-        const a = Math.random() * Math.PI * 2;
-        const rad = 250 + Math.random() * 330;
-        const sp = 760 + Math.random() * 900;
-        sparks.push({
-          x: x + Math.cos(a) * rad,
-          y: y + Math.sin(a) * rad,
-          vx: -Math.cos(a) * sp,
-          vy: -Math.sin(a) * sp,
-          t: 0,
-          life: 0.28 + Math.random() * 0.12,
-          color: Math.random() < 0.5 ? "#ffffff" : fx.spark,
-          width: 1 + Math.random() * 2.2,
-          grav: 0,
-          drag: 0.55,
-        });
-      }
-
-      ensureRunning();
     };
 
     api.current.burst = (x, y, rarity) => {
@@ -377,11 +328,9 @@ export const RevealFx = forwardRef<
       for (const r of rings) {
         if (r.t < 0) continue;
         const k = r.t / r.life;
-        // 外擴：先快後慢；內爆：先慢後急（塌陷感），且越收越亮
-        const rad = r.inward
-          ? r.r1 + (r.r0 - r.r1) * easeInCubic(k)
-          : r.r0 + (r.r1 - r.r0) * easeOutQuint(k);
-        const a = r.inward ? k * k : (1 - k) * (1 - k);
+        // 外擴：先快後慢
+        const rad = r.r0 + (r.r1 - r.r0) * easeOutQuint(k);
+        const a = (1 - k) * (1 - k);
         c.save();
         c.translate(r.x, r.y);
         c.scale(1, r.squash);

@@ -49,11 +49,11 @@ export default async function OddsPage() {
         <h2 className="mb-3 font-bold">跳變演出（僅效果，不影響機率）</h2>
         <ul className="list-disc space-y-2 pl-5 text-sm leading-relaxed">
           <li>
-            抽中 <b>SR</b> 時，有 1/10 機率以「R 蓄力 → 跳升 SR」的演出登場
+            抽中 <b>SR</b> 時，有 1/10 機率以「R 蓄力 → 翻牌時跳升 SR」的演出登場
             （占全部抽卡約 0.4%）。
           </li>
           <li>
-            抽中 <b>SSR</b> 時，有 1/10 機率以「SR 蓄力 → 跳升 SSR」的演出登場
+            抽中 <b>SSR</b> 時，有 1/10 機率以「SR 蓄力 → 翻牌時跳升 SSR」的演出登場
             （占全部抽卡約 0.1%）。
           </li>
           <li>
