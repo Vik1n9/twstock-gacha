@@ -372,6 +372,9 @@ export function GachaStage({ pools }: { pools: PoolInfo[] }) {
         low={low}
         boost={boost}
         hue={hint ? RARITY_COLOR[hint] : null}
+        // 結果頁是玩家停留最久的畫面：背景改為低張數、不做 bloom 與噪點，
+        // 否則「看完卡片再決定要不要續抽」的每一分鐘都在滿載繪圖。
+        idle={phase === "summary"}
       />
 
       <div ref={stageRef} className="absolute inset-0">

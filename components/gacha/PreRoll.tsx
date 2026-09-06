@@ -5,6 +5,7 @@ import gsap from "gsap";
 import type { SectorTheme } from "@/lib/sectors/defs";
 import type { Rarity, RarityFx } from "@/lib/fx/core";
 import { RARITY_FX, fitCanvas, mulberry32, rgba } from "@/lib/fx/core";
+import { fxProfile, startFrameLoop } from "@/lib/fx/quality";
 
 // 抽卡前置演出（企劃書 13.1 五步驟的電影化版本）
 // 快門開場 → 徽章碎片組裝 → 板塊名故障感切入 → 3D 代號滾筒 → 能量匯聚蓄力 → 白閃交棒
@@ -128,7 +129,7 @@ export function PreRoll({
     const { ctx } = fit;
     let { w, h } = fit;
     const rnd = mulberry32(7331);
-    let raf = 0;
+    const profile = fxProfile();
     let disposed = false;
 
     interface P {
@@ -147,15 +148,16 @@ export function PreRoll({
       spin: (rnd() - 0.5) * 1.4,
       accent: rnd() < 0.4,
     });
-    const ps: P[] = Array.from({ length: 190 }, spawn);
+    const ps: P[] = Array.from(
+      { length: Math.round(190 * profile.particleScale) },
+      spawn,
+    );
 
-    let last = performance.now();
     // animT：只在非停格時前進，讓「停格」連環的轉動與核心脈動一起靜止
     let animT = 0;
-    const loop = (now: number) => {
+    const loop = (now: number, rawDt: number) => {
       if (disposed) return;
-      const dt = Math.min((now - last) / 1000, 0.04);
-      last = now;
+      const dt = Math.min(rawDt, 0.04);
 
       const f = fieldRef.current;
       f.surge = f.surge > 0.001 ? f.surge * Math.pow(0.25, dt) : 0;
@@ -237,10 +239,8 @@ export function PreRoll({
       }
       ctx.setLineDash([]);
       ctx.globalCompositeOperation = "source-over";
-
-      raf = requestAnimationFrame(loop);
     };
-    raf = requestAnimationFrame(loop);
+    const stopLoop = startFrameLoop({ fps: () => profile.fps, draw: loop });
 
     const onResize = () => {
       const r = fitCanvas(canvas);
@@ -252,7 +252,7 @@ export function PreRoll({
     window.addEventListener("resize", onResize);
     return () => {
       disposed = true;
-      cancelAnimationFrame(raf);
+      stopLoop();
       window.removeEventListener("resize", onResize);
     };
   }, [low, theme]);

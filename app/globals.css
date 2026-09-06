@@ -428,6 +428,8 @@ body {
   pointer-events: none;
 }
 
+/* 減少動態：系統設定與「特效：低」手動開關共用同一組停用規則。
+   （data-lowfx 由 lib/hooks/useLowFx.ts 寫在 <html> 上） */
 @media (prefers-reduced-motion: reduce) {
   .card-holo::after,
   .rar-SSR.card-holo::before,
@@ -451,6 +453,40 @@ body {
   .bg-glow-in {
     animation: none;
   }
+}
+
+html[data-lowfx="1"] .card-holo::after,
+html[data-lowfx="1"] .rar-SSR.card-holo::before,
+html[data-lowfx="1"] .card-back-holo,
+html[data-lowfx="1"] .card-back-sigil,
+html[data-lowfx="1"] .card-back-ring,
+html[data-lowfx="1"] .card-back-ring-rev,
+html[data-lowfx="1"] .text-glitch::before,
+html[data-lowfx="1"] .text-glitch::after {
+  animation: none;
+}
+
+html[data-lowfx="1"] .card-btn {
+  transition: none;
+}
+html[data-lowfx="1"] .card-btn:hover,
+html[data-lowfx="1"] .card-btn:focus-visible {
+  transform: none;
+}
+html[data-lowfx="1"] .bg-glow-in {
+  animation: none;
+}
+
+/* 弱勢裝置（見 lib/fx/quality.ts 的分級）：holo 斜掃是逐幀重繪 background-position
+   ＋ mix-blend-mode 混色，結果頁與紀錄頁一次會有十張以上同時在跑，是 canvas 之外
+   最大的持續耗電來源。留下靜態的斜掃質感，只停掉動畫本身。 */
+html[data-fxtier="low"] .card-holo::after,
+html[data-fxtier="low"] .card-back-holo {
+  animation: none;
+  background-position: 118% 0;
+}
+html[data-fxtier="low"] .rar-SSR.card-holo::before {
+  animation-duration: 12s;
 }
 
 /* ─────────────────────────────────────────────

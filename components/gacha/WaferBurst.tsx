@@ -11,6 +11,7 @@ import {
   mulberry32,
   rgba,
 } from "@/lib/fx/core";
+import { fxProfile, startFrameLoop } from "@/lib/fx/quality";
 
 // SSR 簽名特效：晶圓陣列光爆（企劃書 14.1）完整版
 // 四階段：內爆蓄力 → 白閃衝擊波 → 3D 晶粒環擴散＋旋轉光柵＋十字光斑 → 金塵落下淡出
@@ -47,11 +48,13 @@ export function WaferBurst({
     const cam = new Camera();
     cam.resize(w, h);
     const rnd = mulberry32(48151);
+    const profile = fxProfile();
+    const n = (count: number) => Math.max(1, Math.round(count * profile.particleScale));
     const GOLD = RARITY_COLOR.SSR;
     const HOT = "#FFE9B0";
 
     // 3D 晶粒：從中心往外炸開的方塊，帶自轉與深度
-    const dies = Array.from({ length: 120 }, () => {
+    const dies = Array.from({ length: n(120) }, () => {
       const a = rnd() * Math.PI * 2;
       const el = (rnd() - 0.5) * 0.9;
       return {
@@ -67,7 +70,7 @@ export function WaferBurst({
     });
 
     // 金塵
-    const motes = Array.from({ length: 160 }, () => ({
+    const motes = Array.from({ length: n(160) }, () => ({
       x: rnd() * w,
       y: -rnd() * h * 0.7,
       vy: 60 + rnd() * 190,
@@ -78,7 +81,6 @@ export function WaferBurst({
     }));
 
     const start = performance.now();
-    let raf = 0;
     let disposed = false;
 
     const loop = (now: number) => {
@@ -248,13 +250,13 @@ export function WaferBurst({
         ctx.fillRect(0, 0, w, h);
       }
 
-      if (p < 1) raf = requestAnimationFrame(loop);
-      else {
+      if (p >= 1) {
         ctx.clearRect(0, 0, w, h);
+        stopLoop();
         doneRef.current?.();
       }
     };
-    raf = requestAnimationFrame(loop);
+    const stopLoop = startFrameLoop({ fps: () => profile.fps, draw: loop });
 
     const onResize = () => {
       const r = fitCanvas(canvas);
@@ -267,7 +269,7 @@ export function WaferBurst({
     window.addEventListener("resize", onResize);
     return () => {
       disposed = true;
-      cancelAnimationFrame(raf);
+      stopLoop();
       window.removeEventListener("resize", onResize);
     };
   }, [low, theme]);
