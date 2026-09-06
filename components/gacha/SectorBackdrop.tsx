@@ -2,7 +2,7 @@
 
 import { useEffect, useRef } from "react";
 import type { SectorTheme } from "@/lib/sectors/defs";
-import { Camera, damp, fitCanvas, mulberry32, rgba } from "@/lib/fx/core";
+import { Camera, damp, fitCanvas, hexRgb, mulberry32, rgba, rgbHex } from "@/lib/fx/core";
 import { fxProfile, startFrameLoop } from "@/lib/fx/quality";
 
 // 板塊主題背景（3D 深度場）
@@ -161,8 +161,20 @@ export function SectorBackdrop({
       pointer.ty = (e.clientY / window.innerHeight - 0.5) * 2;
     };
 
+    // 強調色不硬切：每幀往目標色逼近，跳變卡在卡背轉向時的「低階色 → 結果色」
+    // 因此是一段約 0.3 秒的過場，而不是背景瞬間換一個顏色。
+    const accentRgb = hexRgb(hueRef.current ?? theme.accent);
+    let accentHex = rgbHex(accentRgb);
+    function stepAccent(dt: number) {
+      const target = hexRgb(hueRef.current ?? theme.accent);
+      accentRgb.r = damp(accentRgb.r, target.r, 11, dt);
+      accentRgb.g = damp(accentRgb.g, target.g, 11, dt);
+      accentRgb.b = damp(accentRgb.b, target.b, 11, dt);
+      accentHex = rgbHex(accentRgb);
+    }
+
     function accentColor(): string {
-      return hueRef.current ?? theme.accent;
+      return accentHex;
     }
 
     // ── 星雲底層：緩慢呼吸的大面積徑向漸層
@@ -363,6 +375,7 @@ export function SectorBackdrop({
 
       boostRef.current = damp(boostRef.current, targetRef.current, 4.5, dt);
       const b = boostRef.current;
+      stepAccent(dt);
 
       pointer.x = damp(pointer.x, pointer.tx, 3, dt);
       pointer.y = damp(pointer.y, pointer.ty, 3, dt);

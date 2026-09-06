@@ -26,6 +26,15 @@ export function rgba(hex: string, alpha: number): string {
   return `rgba(${r},${g},${b},${alpha})`;
 }
 
+// RGB → #rrggbb（rgba()／hexRgb() 都吃 hex，逐幀漸變色時需要把結果轉回去）
+export function rgbHex({ r, g, b }: RGB): string {
+  const h = (v: number) =>
+    Math.round(v < 0 ? 0 : v > 255 ? 255 : v)
+      .toString(16)
+      .padStart(2, "0");
+  return `#${h(r)}${h(g)}${h(b)}`;
+}
+
 export function mixHex(a: string, b: string, t: number): string {
   const x = hexRgb(a);
   const y = hexRgb(b);

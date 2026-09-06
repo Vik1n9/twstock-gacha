@@ -16,7 +16,7 @@ import { RARITY_COLOR, RARITY_RANK, type Rarity, topRarity } from "@/lib/fx/core
 type Phase = "idle" | "preroll" | "reveal" | "summary";
 type DrawType = "single" | "ten";
 
-// 前置演出長度不再固定：PreRoll 會等抽卡結果回來才演稀有度預告／跳變昇格，
+// 前置演出長度不再固定：PreRoll 會等抽卡結果回來才演稀有度預告，
 // 因此由它的 onDone 通知結束；PREROLL_MAX_MS 只是 onDone 沒來時的保險上限。
 const PREROLL_MAX_MS = 12000;
 const POOL_PREF_KEY = "twstock-pool";
@@ -85,9 +85,9 @@ export function GachaStage({ pools }: { pools: PoolInfo[] }) {
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const [boost, setBoost] = useState(0);
+  // hint＝目前「對外顯示」的稀有度：驅動背景色與前置演出的彩光預告。
+  // 跳變卡先填低階稀有度（假預告），翻牌時卡背轉向才由 jumpShift 換成真結果。
   const [hint, setHint] = useState<Rarity | null>(null);
-  // 跳變演出：結果含 jumpFrom 標記的最高稀有卡時，前置演出先以低階色蓄力再跳升
-  const [jumpFrom, setJumpFrom] = useState<"R" | "SR" | null>(null);
   const [detail, setDetail] = useState<CardDetailData | null>(null);
   // 演出元件模組（閒置預載 + 需要時 ensureFx 保證就緒）；idle 畫面完全不需要它
   const [fx, ensureFx] = useIdlePreload(loadFx);
@@ -118,33 +118,22 @@ export function GachaStage({ pools }: { pools: PoolInfo[] }) {
   // 企劃書 13.1 步驟 4：板塊內股票代號快速流動（演出用範例碼）
   const tickerCodes = ["2330", "2303", "2454", "3034", "2308", "2408", "6770", "3711", "6509", "8081"];
 
-  const impact = useCallback(
-    (x: number, y: number, rarity: Rarity, jumpFrom?: "R" | "SR" | null) => {
-      // 跳變三段式爆點：低階色爆開 → 能量向內塌陷收走 → 結果色正式炸開。
-      // 中間夾一記內爆是關鍵：少了它，兩發爆點只像同一個特效放兩次。
-      if (jumpFrom) {
-        fxRef.current?.burst(x, y, jumpFrom);
-        setTimeout(() => fxRef.current?.implode(x, y, rarity), 140);
-        setTimeout(() => fxRef.current?.burst(x, y, rarity), 340);
-      } else {
-        fxRef.current?.burst(x, y, rarity);
-      }
-      // 高稀有度翻開時，背景跟著往上推一段（跳變再多推一級）
-      if (RARITY_RANK[rarity] >= 2 || jumpFrom) {
-        const peak = RARITY_RANK[rarity] >= 3 || jumpFrom ? 1 : 0.7;
-        setBoost(peak);
-        setTimeout(() => setBoost(0.28), jumpFrom ? 1000 : 700);
-      }
-    },
-    [],
-  );
+  const impact = useCallback((x: number, y: number, rarity: Rarity) => {
+    fxRef.current?.burst(x, y, rarity);
+    // 高稀有度翻開時，背景跟著往上推一段
+    if (RARITY_RANK[rarity] >= 2) {
+      setBoost(RARITY_RANK[rarity] >= 3 ? 1 : 0.7);
+      setTimeout(() => setBoost(0.28), 700);
+    }
+  }, []);
 
-  // PreRoll 撕裂瞬間：畫面中央先收束再炸開（RevealFx 層在前置演出之上）
-  const fireJump = useCallback((rarity: Rarity) => {
-    const x = window.innerWidth / 2;
-    const y = window.innerHeight / 2;
-    fxRef.current?.implode(x, y, rarity);
-    setTimeout(() => fxRef.current?.burst(x, y, rarity), 120);
+  // 跳變卡的卡背轉向瞬間：背景由低階色轉成結果色，之後就是該稀有度的正常出場。
+  // 十連可能有好幾張跳變卡，背景只往上走，別被後面較低階的那張拉回去。
+  const jumpShift = useCallback((rarity: Rarity) => {
+    setHint((cur) =>
+      cur && RARITY_RANK[cur] > RARITY_RANK[rarity] ? cur : rarity,
+    );
+    setBoost((cur) => Math.max(cur, RARITY_RANK[rarity] >= 3 ? 0.92 : 0.72));
   }, []);
 
   const start = useCallback(
@@ -155,7 +144,6 @@ export function GachaStage({ pools }: { pools: PoolInfo[] }) {
       setError(null);
       setOutcome(null);
       setHint(null);
-      setJumpFrom(null);
       setDrawType(type);
 
       // 演出元件就緒才切 phase（閒置預載通常已完成，此處多半是零等待）；
@@ -175,14 +163,15 @@ export function GachaStage({ pools }: { pools: PoolInfo[] }) {
       fxRef.current?.clear();
 
       const pending = fetchDraw(pool.poolId, type).then((r) => {
-        // 結果先回來 → 給前置演出稀有度預告（彩光預告）＋跳變前兆標記
+        // 結果先回來 → 給前置演出稀有度預告（彩光預告）。
+        // 跳變卡改給低階稀有度：前置演出照常演成「只有 R」，翻牌時才翻盤。
         if (r.ok) {
           const top = topRarity(r.data.cards);
-          setHint(top);
-          setJumpFrom(
+          const jumpFrom =
             r.data.cards.find((c) => c.rarity === top && c.jumpFrom)?.jumpFrom ??
-              null,
-          );
+            null;
+          // 低特效模式沒有翻牌演出，也就沒有轉色的時機：直接給真結果色
+          setHint(low ? top : jumpFrom ?? top);
         }
         return r;
       });
@@ -213,6 +202,8 @@ export function GachaStage({ pools }: { pools: PoolInfo[] }) {
       }
       setOutcome(res.data);
       appendOutcome(res.data, type);
+      // 演出期間就按了跳過：同樣沒有卡背轉向，改直接顯示真結果色
+      if (skipRef.current) setHint(topRarity(res.data.cards));
       setPhase(skipRef.current ? "summary" : "reveal");
       setBoost(skipRef.current ? 0.12 : 0.34);
       setBusy(false);
@@ -229,7 +220,6 @@ export function GachaStage({ pools }: { pools: PoolInfo[] }) {
     setDetail(null);
     setBoost(0);
     setHint(null);
-    setJumpFrom(null);
     fxRef.current?.clear();
   };
 
@@ -237,6 +227,8 @@ export function GachaStage({ pools }: { pools: PoolInfo[] }) {
     skipRef.current = true;
     fxRef.current?.clear();
     if (outcome) {
+      // 跳過演出＝不會有卡背轉向，跳變卡的假預告色要在這裡收回真結果色
+      setHint(topRarity(outcome.cards));
       setPhase("summary");
       setBoost(0.12);
     }
@@ -417,11 +409,9 @@ export function GachaStage({ pools }: { pools: PoolInfo[] }) {
               stockCodes={tickerCodes}
               low={low}
               hint={hint}
-              jumpFrom={jumpFrom}
               onBoost={setBoost}
-              onJump={fireJump}
               onDone={() => {
-                // 前置演出跑完（含等結果與昇格段）才放行 start() 進入翻牌
+                // 前置演出跑完（含等結果回來）才放行 start() 進入翻牌
                 prerollDoneRef.current?.();
                 prerollDoneRef.current = null;
               }}
@@ -436,6 +426,7 @@ export function GachaStage({ pools }: { pools: PoolInfo[] }) {
               size={240}
               low={low}
               onImpact={impact}
+              onJumpShift={jumpShift}
               onFlipped={() =>
                 setTimeout(() => setPhase("summary"), low ? 100 : 1800)
               }
@@ -449,6 +440,7 @@ export function GachaStage({ pools }: { pools: PoolInfo[] }) {
               boardName={outcome.boardName}
               low={low}
               onImpact={impact}
+              onJumpShift={jumpShift}
               onBoost={setBoost}
               onDone={() => setPhase("summary")}
             />
