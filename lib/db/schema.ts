@@ -109,7 +109,13 @@ export const poolSnapshots = sqliteTable(
     reason: text("reason"), // 未開放原因
     createdAt: timestampMs("created_at"),
   },
-  (t) => [uniqueIndex("pool_snapshots_bk").on(t.snapshotDate, t.poolId)],
+  (t) => [
+    uniqueIndex("pool_snapshots_bk").on(t.snapshotDate, t.poolId),
+    // 抽卡時要取「某池最新的開放快照」（見 lib/gacha/service.ts）。
+    // 只有 pool_snapshots_bk 的話前綴對不上（它是 snapshot_date 在前），
+    // 查詢計畫會落到 SCAN，成本隨快照歷史線性成長（每交易日 +17 列）。
+    index("pool_snapshots_pool_idx").on(t.poolId, t.snapshotDate),
+  ],
 );
 
 // 企劃書 16.5 CardPoolStockMapping
