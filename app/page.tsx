@@ -13,8 +13,21 @@ export default async function Home() {
 
       {/* 手機優先：改為可換行的 flex，連結加大點擊區 */}
       <div className="dim flex flex-wrap items-center justify-center gap-x-4 gap-y-1 px-2 text-center text-xs">
+        {/* 免責聲明 */}
         <span className="basis-full">
-          稀有度由個股近 30 個交易日漲跌幅決定（企劃書 1.2）
+          本遊戲僅供娛樂，不構成投資建議，亦不保證數字正確，投資理財請謹慎評估。
+        </span>
+        <span className="basis-full opacity-80">
+          Produced by{" "}
+          <a
+            href="https://github.com/Vik1n9/twstock-gacha"
+            target="_blank"
+            rel="noopener noreferrer"
+            className="py-1 underline hover:text-[var(--ink)]"
+          >
+            Vik1n9
+          </a>{" "}
+          · Released under the MIT License
         </span>
         <Link href="/history" className="py-1 underline hover:text-[var(--ink)]">
           抽卡紀錄
