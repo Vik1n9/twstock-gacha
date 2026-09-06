@@ -17,12 +17,13 @@ export default function RootLayout({
     <html lang="zh-Hant-TW">
       <body className="min-h-screen antialiased">
         <header className="sticky top-0 z-40 border-b border-[var(--line)] bg-[color-mix(in_srgb,var(--bg)_85%,transparent)] backdrop-blur">
-          <nav className="mx-auto flex h-14 max-w-5xl items-center gap-6 px-4">
-            <Link href="/" className="font-bold tracking-wide">
+          {/* 手機優先：縮小間距、標題已可回首頁故隱藏「抽卡」，機率說明縮寫，避免整列橫向溢出 */}
+          <nav className="mx-auto flex h-14 max-w-5xl items-center gap-3 px-3 sm:gap-6 sm:px-4">
+            <Link href="/" className="shrink-0 font-bold tracking-wide">
               台股<span className="text-[var(--gold)]">抽卡</span>所
             </Link>
-            <div className="flex flex-1 items-center gap-5 text-sm">
-              <Link href="/" className="dim hover:text-[var(--ink)]">
+            <div className="flex flex-1 items-center gap-3 text-sm sm:gap-5">
+              <Link href="/" className="dim hidden hover:text-[var(--ink)] sm:inline">
                 抽卡
               </Link>
               <Link href="/history" className="dim hover:text-[var(--ink)]">
@@ -31,14 +32,14 @@ export default function RootLayout({
               <Link href="/pools" className="dim hover:text-[var(--ink)]">
                 卡池
               </Link>
-              <Link href="/odds" className="dim hover:text-[var(--ink)]">
-                機率說明
+              <Link href="/odds" className="dim whitespace-nowrap hover:text-[var(--ink)]">
+                機率<span className="hidden sm:inline">說明</span>
               </Link>
             </div>
             <LowFxToggle />
           </nav>
         </header>
-        <main className="mx-auto max-w-5xl px-4 pb-24 pt-6">{children}</main>
+        <main className="mx-auto max-w-5xl px-3 pb-24 pt-4 sm:px-4 sm:pt-6">{children}</main>
       </body>
     </html>
   );
