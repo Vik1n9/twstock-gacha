@@ -24,6 +24,7 @@ export function WaferGrid({
   low,
   onDone,
   onImpact,
+  onJumpShift,
   onBoost,
 }: {
   cards: DrawCard[];
@@ -31,12 +32,8 @@ export function WaferGrid({
   boardName: string | null;
   low: boolean;
   onDone: () => void;
-  onImpact?: (
-    x: number,
-    y: number,
-    rarity: Rarity,
-    jumpFrom?: "R" | "SR" | null,
-  ) => void;
+  onImpact?: (x: number, y: number, rarity: Rarity) => void;
+  onJumpShift?: (rarity: Rarity) => void;
   onBoost?: (v: number) => void;
 }) {
   const rootRef = useRef<HTMLDivElement>(null);
@@ -177,6 +174,7 @@ export function WaferGrid({
                 delay={low ? 0 : schedule.delays[i]}
                 low={low}
                 onImpact={onImpact}
+                onJumpShift={onJumpShift}
               />
             </div>
           );

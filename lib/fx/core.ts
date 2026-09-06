@@ -1,6 +1,8 @@
 // 特效共用核心：色彩、緩動、亂數、偽 3D 投影
 // 不依賴 WebGL：以 Canvas 2D + 透視投影達成深度感，行動裝置也吃得住。
 
+import { fxProfile } from "./quality";
+
 export type Rarity = "C" | "R" | "SR" | "SSR";
 
 export interface RGB {
@@ -22,6 +24,15 @@ export function hexRgb(hex: string): RGB {
 export function rgba(hex: string, alpha: number): string {
   const { r, g, b } = hexRgb(hex);
   return `rgba(${r},${g},${b},${alpha})`;
+}
+
+// RGB → #rrggbb（rgba()／hexRgb() 都吃 hex，逐幀漸變色時需要把結果轉回去）
+export function rgbHex({ r, g, b }: RGB): string {
+  const h = (v: number) =>
+    Math.round(v < 0 ? 0 : v > 255 ? 255 : v)
+      .toString(16)
+      .padStart(2, "0");
+  return `#${h(r)}${h(g)}${h(b)}`;
 }
 
 export function mixHex(a: string, b: string, t: number): string {
@@ -166,10 +177,13 @@ export function topRarity(list: { rarity: Rarity }[]): Rarity {
   return best;
 }
 
-// 建立高解析度 canvas context（處理 devicePixelRatio）
+// 建立 canvas context（處理 devicePixelRatio）
+//
+// 解析度上限預設跟著裝置檔次走（見 lib/fx/quality.ts）：手機的 DPR 常是 3，
+// 過去鉗在 2 仍是 CSS 尺寸的 4 倍像素量，全螢幕特效光是填色就足以讓機身發燙。
 export function fitCanvas(
   canvas: HTMLCanvasElement,
-  maxDpr = 2,
+  maxDpr = fxProfile().maxDpr,
 ): { ctx: CanvasRenderingContext2D; w: number; h: number; dpr: number } | null {
   const ctx = canvas.getContext("2d");
   if (!ctx) return null;
