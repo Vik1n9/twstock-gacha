@@ -450,3 +450,36 @@ body {
     opacity: 1;
   }
 }
+
+/* ─────────────────────────────────────────────
+   首頁卡池選擇器（手機優先）
+   --pool-w：卡池小卡＝單抽／十連抽按鈕列的共用寬度。
+   手機＝面板可用寬度（一次剛好一張，左右緣貼齊）；
+   sm 以上固定 19rem（144＋gap 16＋144＝兩顆抽卡鍵相加），維持與按鈕列對齊。
+   ───────────────────────────────────────────── */
+.pool-scope {
+  --pool-w: 100%;
+}
+@media (min-width: 640px) {
+  .pool-scope {
+    --pool-w: 19rem;
+  }
+}
+
+.pool-strip {
+  scrollbar-width: none;
+  overscroll-behavior-x: contain;
+}
+.pool-strip::-webkit-scrollbar {
+  display: none;
+}
+
+/* 觸控裝置才開啟捲動吸附：滑鼠拖曳是逐幀寫 scrollLeft，開 mandatory 會互相打架 */
+@media (hover: none) and (pointer: coarse) {
+  .pool-strip {
+    scroll-snap-type: x mandatory;
+  }
+  .pool-card {
+    scroll-snap-align: center;
+  }
+}

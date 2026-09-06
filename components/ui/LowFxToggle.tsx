@@ -8,7 +8,7 @@ export function LowFxToggle() {
     <button
       type="button"
       onClick={() => setLow(!low)}
-      className="rounded-full border border-[var(--line)] px-3 py-1 text-xs dim hover:text-[var(--ink)]"
+      className="dim shrink-0 whitespace-nowrap rounded-full border border-[var(--line)] px-2.5 py-1.5 text-xs hover:text-[var(--ink)]"
       title="低特效模式（尊重系統減少動態設定）"
     >
       特效：{low ? "低" : "完整"}

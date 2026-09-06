@@ -190,7 +190,7 @@ export function GachaStage({ pools }: { pools: PoolInfo[] }) {
             background: `radial-gradient(ellipse 90% 46% at 50% -8%, color-mix(in srgb, ${theme.primary} 38%, transparent), transparent 72%)`,
           }}
         />
-        <div className="panel relative overflow-hidden p-6 text-center">
+        <div className="panel pool-scope relative overflow-hidden p-4 text-center sm:p-6">
           <div
             className="pointer-events-none absolute inset-x-0 top-0 h-px"
             style={{ background: `linear-gradient(90deg, transparent, ${theme.accent}, transparent)` }}
@@ -211,21 +211,28 @@ export function GachaStage({ pools }: { pools: PoolInfo[] }) {
             <div className="dim mt-1 text-xs">{pool.board.description}</div>
           )}
           {pool?.snapshot && (
-            <div className="dim mt-1 text-xs">
-              資料日 {pool.snapshot.snapshotDate}　|　可抽 {pool.snapshot.stockCount} 檔　|　漲{" "}
-              {pool.snapshot.upStockCount} / 跌 {pool.snapshot.downStockCount}　|　30 日強度{" "}
-              {fmtPct(pool.snapshot.board30dStrength)}
+            <div className="dim mt-1.5 flex flex-wrap items-center justify-center gap-x-2 gap-y-0.5 text-xs tabular-nums">
+              <span>資料日 {pool.snapshot.snapshotDate}</span>
+              <span aria-hidden>|</span>
+              <span>可抽 {pool.snapshot.stockCount} 檔</span>
+              <span aria-hidden>|</span>
+              <span>
+                漲 {pool.snapshot.upStockCount} / 跌 {pool.snapshot.downStockCount}
+              </span>
+              <span aria-hidden>|</span>
+              <span>30 日強度 {fmtPct(pool.snapshot.board30dStrength)}</span>
             </div>
           )}
 
           <RarityLegend />
 
-          <div className="mt-5 flex items-center justify-center gap-4">
+          {/* 寬度＝下方卡池小卡（--pool-w）：手機填滿面板寬度，桌機 19rem */}
+          <div className="mx-auto mt-5 flex w-[var(--pool-w)] items-center gap-4">
             <button
               type="button"
               disabled={!pool?.snapshot?.isOpen || busy}
               onClick={() => start("single")}
-              className="w-36 rounded-xl border-2 px-8 py-3 text-lg font-bold transition hover:brightness-125 disabled:opacity-40"
+              className="flex-1 rounded-xl border-2 px-4 py-3 text-lg font-bold transition hover:brightness-125 disabled:opacity-40"
               style={{
                 borderColor: theme.primary,
                 color: theme.primary,
@@ -238,7 +245,7 @@ export function GachaStage({ pools }: { pools: PoolInfo[] }) {
               type="button"
               disabled={!pool?.snapshot?.isOpen || busy}
               onClick={() => start("ten")}
-              className="w-36 rounded-xl px-8 py-3 text-lg font-bold text-black transition hover:brightness-110 disabled:opacity-40"
+              className="flex-1 rounded-xl px-4 py-3 text-lg font-bold text-black transition hover:brightness-110 disabled:opacity-40"
               style={{
                 background: `linear-gradient(120deg, ${theme.accent}, ${theme.primary})`,
                 boxShadow: `0 0 30px color-mix(in srgb, ${theme.accent} 40%, transparent)`,
@@ -426,7 +433,7 @@ export function GachaStage({ pools }: { pools: PoolInfo[] }) {
                     </button>
                   ))}
                 </div>
-                <div className="mt-6 flex items-center justify-center gap-3">
+                <div className="mt-6 flex flex-wrap items-center justify-center gap-3">
                   <button
                     type="button"
                     onClick={() => start(drawType)}
@@ -478,8 +485,10 @@ function maxGroupCount(
 }
 
 // 企劃書 12.1 卡池選擇：抽卡鍵下方、左右循環滑動（清單渲染三副本達成無縫循環）
-// 動畫：點選／箭頭平滑捲動居中；觸控走原生慣性，滑鼠可拖曳後平滑吸附；
-// 捲出中間副本範圍時瞬移回等價位置（視覺等價），形成循環。規範 §7：low/reduced-motion 走瞬時。
+// 手機優先：小卡寬度＝面板可用寬度（--pool-w），一次剛好一張；觸控裝置交給原生捲動吸附，
+// 手指離開後自動選中停在中央的池，點小卡也能直接選（三副本皆可點，避免點到副本沒反應）。
+// 左右箭頭移到標題列——絕對定位的箭頭會蓋住滿版小卡的左右緣，是手機點不到卡池的主因之一。
+// 規範 §7：low/reduced-motion 走瞬時捲動。
 function PoolCarousel({
   pools,
   currentPoolId,
@@ -491,9 +500,23 @@ function PoolCarousel({
 }) {
   const stripRef = useRef<HTMLDivElement>(null);
   const dragRef = useRef<{ x: number; scroll: number } | null>(null);
-  const draggedRef = useRef(false);
+  const draggedAtRef = useRef(0); // 最近一次滑鼠拖曳結束的時間戳（用來擋拖曳尾端的誤點）
   const animatingRef = useRef(0); // 程式化平滑捲動的落定計時器
+  const idleRef = useRef(0); // 使用者捲動停止的 debounce 計時器
   const [low] = useLowFx();
+
+  const cancelIdle = useCallback(() => {
+    window.clearTimeout(idleRef.current);
+    idleRef.current = 0;
+  }, []);
+
+  useEffect(
+    () => () => {
+      window.clearTimeout(animatingRef.current);
+      window.clearTimeout(idleRef.current);
+    },
+    [],
+  );
 
   const behavior = useCallback((): ScrollBehavior => {
     if (low) return "auto";
@@ -506,7 +529,7 @@ function PoolCarousel({
     return "smooth";
   }, [low]);
 
-  // 取三副本中最接近目前視窗中心的那顆 chip（避免程式化捲動跨副本來回）
+  // 取三副本中最接近目前視窗中心的那顆小卡（避免程式化捲動跨副本來回）
   const nearestChip = useCallback((poolId?: string) => {
     const el = stripRef.current;
     if (!el) return null;
@@ -523,7 +546,9 @@ function PoolCarousel({
   }, []);
 
   // 等程式化平滑捲動落定：需先偵測到實際位移（UA 捲動有起步延遲，避免誤判），
-  // 再連續停滯兩次讀值即視為結束；上限 20 個 tick 保底
+  // 再連續停滯兩次讀值即視為結束。目標本來就在中央時捲動不會啟動，
+  // 5 個 tick（約 0.3 秒）內沒動就直接收工——否則會一路空轉到上限，
+  // 這段期間 onScroll 被視為程式化捲動而略過，使用者接著滑動就選不到池。
   const waitSettle = useCallback(
     (onSettled: () => void) => {
       const el = stripRef.current;
@@ -535,12 +560,13 @@ function PoolCarousel({
       let ticks = 0;
       let moved = false;
       const tick = () => {
+        ticks++;
         const cur = el.scrollLeft;
         if (cur !== startX) moved = true;
         if (moved && cur === last) stable++;
         else if (cur !== last) stable = 0;
         last = cur;
-        if ((moved && stable >= 2) || ++ticks > 20) {
+        if ((moved && stable >= 2) || (!moved && ticks >= 5) || ticks > 20) {
           animatingRef.current = 0;
           onSettled();
           return;
@@ -552,22 +578,30 @@ function PoolCarousel({
     [],
   );
 
-  // 循環修正：捲出中間副本範圍就瞬移回等價位置（scrollLeft 直接賦值＝瞬時）
-  // 步距用相鄰副本 offsetLeft 差實測——小卡固定寬度，此值即單一副本精確寬度
+  // 循環修正：把 scrollLeft 正規化到「視窗中央那張卡一定落在中間副本」的區間，
+  // 超出就位移整整一個副本寬（內容週期性重複，視覺完全等價）。
+  // 舊版用 [0.3, 1.7] 副本寬當界線，中央有一半機率落在副本 0／2 的卡上——
+  // 那些卡是 disabled 的，正是「點了卡池沒反應」的來源；改用精確區間杜絕。
+  // 只在捲動停下時呼叫：慣性滑動途中改 scrollLeft 會中斷手機的滑動慣性。
   const correctLoop = useCallback(() => {
     const el = stripRef.current;
     if (!el) return;
+    if (el.scrollWidth <= el.clientWidth + 1) return; // 卡池太少、無可捲動範圍
     const chips = Array.from(el.querySelectorAll<HTMLElement>("[data-pool]"));
     const per = chips.length / 3;
     if (!Number.isInteger(per) || per === 0) return;
-    const stride = chips[per].offsetLeft - chips[0].offsetLeft;
-    if (stride <= 0) return;
-    if (el.scrollLeft < stride * 0.3) el.scrollLeft += stride;
-    else if (el.scrollLeft > stride * 1.7) el.scrollLeft -= stride;
+    const stride = chips[per].offsetLeft - chips[0].offsetLeft; // 單一副本寬（含間距）
+    const step = chips[1] ? chips[1].offsetLeft - chips[0].offsetLeft : stride; // 單張卡步距
+    if (stride <= 0 || step <= 0) return;
+    // 第 i 張卡置中時 scrollLeft = i * step，故中央落在副本 1 ⇔ scrollLeft ∈ [lo, lo + stride)
+    const lo = stride - step / 2;
+    const norm = lo + ((((el.scrollLeft - lo) % stride) + stride) % stride);
+    if (Math.abs(norm - el.scrollLeft) > 0.5) el.scrollLeft = norm;
   }, []);
 
   const centerChip = useCallback(
     (chip: HTMLElement) => {
+      cancelIdle();
       const b = behavior();
       if (b === "smooth") {
         // 平滑置中：抑制循環修正直到落定（絕對目標位置不變，中途修正會震盪）
@@ -578,13 +612,22 @@ function PoolCarousel({
         correctLoop();
       }
     },
-    [behavior, correctLoop, waitSettle],
+    [behavior, cancelIdle, correctLoop, waitSettle],
   );
 
+  // 使用者捲動（觸控慣性／滾輪／拖曳）停下後：先做循環修正，
+  // 再把停在中央的卡池設為選中——手機的主要操作就是滑動，滑完不該還要再點一下。
   const onScroll = useCallback(() => {
-    if (animatingRef.current) return; // 程式化捲動中不修正（絕對目標不變，修正會震盪）
-    correctLoop();
-  }, [correctLoop]);
+    if (animatingRef.current) return; // 程式化捲動中：由 waitSettle 收尾
+    window.clearTimeout(idleRef.current);
+    idleRef.current = window.setTimeout(() => {
+      idleRef.current = 0;
+      if (animatingRef.current) return;
+      correctLoop();
+      const id = nearestChip()?.dataset.pool;
+      if (id && id !== currentPoolId) onSelect(id);
+    }, 150);
+  }, [correctLoop, currentPoolId, nearestChip, onSelect]);
 
   // 初始定位：等客戶端就緒（hydration 完成＋useSyncExternalStore 已讀到偏好）後，
   // 瞬時置中目前池一次。不能在 hydration commit 就定位——當下偏好尚未讀到，
@@ -612,6 +655,7 @@ function PoolCarousel({
     (dir: 1 | -1) => {
       const el = stripRef.current;
       if (!el) return;
+      cancelIdle();
       const chips = Array.from(el.querySelectorAll<HTMLElement>("[data-pool]"));
       if (chips.length === 0) return;
       const center = el.scrollLeft + el.clientWidth / 2;
@@ -637,12 +681,12 @@ function PoolCarousel({
         if (target.dataset.pool) onSelect(target.dataset.pool);
       }
     },
-    [behavior, correctLoop, nearestChip, onSelect, waitSettle],
+    [behavior, cancelIdle, correctLoop, nearestChip, onSelect, waitSettle],
   );
 
-  // 滑鼠拖曳（觸控裝置走原生滾動慣性，不攔）
+  // 滑鼠拖曳（觸控裝置走原生滾動慣性＋CSS 吸附，不攔）
   // 注意：不可用 setPointerCapture——capture 會把 pointerup 導回 strip，
-  // 瀏覽器合成的 click 目標隨之變成 strip，chip 的 onClick 會失效
+  // 瀏覽器合成的 click 目標隨之變成 strip，小卡的 onClick 會失效
   const onPointerDown = useCallback(
     (e: React.PointerEvent<HTMLDivElement>) => {
       if (e.pointerType !== "mouse") return;
@@ -650,13 +694,14 @@ function PoolCarousel({
       if (!el) return;
       window.clearTimeout(animatingRef.current);
       animatingRef.current = 0;
+      cancelIdle();
       dragRef.current = { x: e.clientX, scroll: el.scrollLeft };
-      draggedRef.current = false;
+      let dragged = false;
       const onMove = (ev: PointerEvent) => {
         const drag = dragRef.current;
         if (!drag || !el) return;
         const dx = ev.clientX - drag.x;
-        if (Math.abs(dx) > 4) draggedRef.current = true;
+        if (Math.abs(dx) > 4) dragged = true;
         el.scrollLeft = drag.scroll - dx;
       };
       const onUp = () => {
@@ -664,7 +709,10 @@ function PoolCarousel({
         window.removeEventListener("pointerup", onUp);
         window.removeEventListener("pointercancel", onUp);
         dragRef.current = null;
-        if (!draggedRef.current) return;
+        if (!dragged) return;
+        // 時間戳而非布林旗標：拖曳若沒有落在小卡上就不會有 click 來清旗標，
+        // 舊版會讓旗標一直留著，把下一次真正的點擊吃掉（點不到卡池）
+        draggedAtRef.current = Date.now();
         // 吸附：最接近中央的池設為選中並平滑置中
         const chip = nearestChip();
         if (chip?.dataset.pool) onSelect(chip.dataset.pool);
@@ -674,41 +722,38 @@ function PoolCarousel({
       window.addEventListener("pointerup", onUp);
       window.addEventListener("pointercancel", onUp);
     },
-    [centerChip, nearestChip, onSelect],
+    [cancelIdle, centerChip, nearestChip, onSelect],
   );
 
-  // 拖曳結束落在同一顆 chip 時，click 不觸發選池（避免誤選滑過的 chip）
+  // 拖曳結束當下合成的 click 不觸發選池（避免誤選滑過的小卡）
   const onChipClickCapture = useCallback((e: React.MouseEvent) => {
-    if (!draggedRef.current) return;
+    if (Date.now() - draggedAtRef.current > 250) return;
     e.preventDefault();
     e.stopPropagation();
-    draggedRef.current = false;
   }, []);
 
-  // 每池一張固定寬度小卡：寬度＝單抽＋十連抽鍵相加（144×2＋gap 16＝304px＝19rem），
-  // 與上方按鈕列左右緣完全對齊
+  // 每池一張小卡，寬度＝ --pool-w：手機剛好填滿面板可用寬度（一次一張），
+  // sm 以上為 19rem（＝單抽＋十連抽鍵相加），與上方按鈕列左右緣對齊
   const renderCard = (p: PoolInfo, copy: number) => {
     const color = p.board?.theme?.primary ?? null;
     const active = p.poolId === currentPoolId;
-    const hidden = copy !== 1; // 副本 0/2 只為循環服務，不互動
+    const clone = copy !== 1; // 副本 0／2 只為循環服務：不進無障礙樹、不可 Tab，但仍可點
     const snap = p.snapshot;
     return (
       <button
         key={`${copy}-${p.poolId}`}
         type="button"
         data-pool={p.poolId}
-        disabled={hidden || undefined}
-        tabIndex={hidden ? -1 : undefined}
-        aria-hidden={hidden || undefined}
+        tabIndex={clone ? -1 : undefined}
+        aria-hidden={clone || undefined}
         aria-pressed={active || undefined}
         title={p.poolName}
         onClick={() => {
-          if (hidden) return;
           onSelect(p.poolId);
           const chip = nearestChip(p.poolId);
           if (chip) centerChip(chip);
         }}
-        className={`w-[19rem] max-w-full shrink-0 rounded-xl border px-3.5 py-2.5 text-left transition hover:brightness-125 ${
+        className={`pool-card w-[var(--pool-w)] shrink-0 rounded-xl border px-3.5 py-2.5 text-left transition hover:brightness-125 ${
           active ? "" : "opacity-80"
         }`}
         style={{
@@ -759,40 +804,47 @@ function PoolCarousel({
     );
   };
 
+  const arrowClass =
+    "flex h-9 w-9 shrink-0 items-center justify-center rounded-lg border border-[var(--line)] bg-[var(--panel-2)] text-lg leading-none text-white/70 transition hover:text-white active:brightness-125";
+
   return (
-    <div className="relative mt-5">
-      <div className="dim mb-1.5 text-xs tracking-widest">選擇卡池</div>
+    <div className="mt-5">
+      <div className="mb-1.5 flex items-center gap-2">
+        <span className="dim text-xs tracking-widest">選擇卡池</span>
+        <span className="dim text-[11px]">滑動或點選</span>
+        <button
+          type="button"
+          aria-label="上一個卡池"
+          onClick={() => nudge(-1)}
+          className={`${arrowClass} ml-auto`}
+        >
+          ‹
+        </button>
+        <button
+          type="button"
+          aria-label="下一個卡池"
+          onClick={() => nudge(1)}
+          className={arrowClass}
+        >
+          ›
+        </button>
+      </div>
       <div
         ref={stripRef}
         aria-label="選擇卡池"
         onScroll={onScroll}
         onPointerDown={onPointerDown}
         onClickCapture={onChipClickCapture}
-        className="flex select-none items-center gap-2 overflow-x-auto py-1 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
+        className="pool-strip relative flex select-none items-center gap-2 overflow-x-auto py-1"
         style={{
-          // 置中墊：50% 減小卡半寬（19rem/2＝9.5rem），讓任一張小卡都能捲到正中央
-          paddingLeft: "max(calc(50% - 9.5rem), 0px)",
-          paddingRight: "max(calc(50% - 9.5rem), 0px)",
+          // 置中墊：50% 減小卡半寬，讓任一張小卡都能捲到正中央
+          // （手機 --pool-w 為 100% → 墊寬 0，小卡本身即滿版）
+          paddingLeft: "max(calc(50% - var(--pool-w) / 2), 0px)",
+          paddingRight: "max(calc(50% - var(--pool-w) / 2), 0px)",
         }}
       >
         {[0, 1, 2].map((copy) => pools.map((p) => renderCard(p, copy)))}
       </div>
-      <button
-        type="button"
-        aria-label="上一個卡池"
-        onClick={() => nudge(-1)}
-        className="absolute left-0 top-1/2 flex h-9 w-7 -translate-y-1/2 items-center justify-center rounded-l-lg bg-gradient-to-r from-[var(--panel-2)] to-transparent text-lg text-white/60 transition hover:text-white"
-      >
-        ‹
-      </button>
-      <button
-        type="button"
-        aria-label="下一個卡池"
-        onClick={() => nudge(1)}
-        className="absolute right-0 top-1/2 flex h-9 w-7 -translate-y-1/2 items-center justify-center rounded-r-lg bg-gradient-to-l from-[var(--panel-2)] to-transparent text-lg text-white/60 transition hover:text-white"
-      >
-        ›
-      </button>
     </div>
   );
 }
@@ -805,7 +857,7 @@ function RarityLegend() {  const items: { r: Rarity; label: string }[] = [
     { r: "SSR", label: "傳說" },
   ];
   return (
-    <div className="mt-4 flex flex-wrap items-center justify-center gap-2">
+    <div className="mt-4 grid grid-cols-2 justify-items-center gap-2 sm:flex sm:flex-wrap sm:items-center sm:justify-center">
       {items.map(({ r, label }) => (
         <span
           key={r}

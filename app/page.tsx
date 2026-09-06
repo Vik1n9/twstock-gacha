@@ -11,17 +11,18 @@ export default async function Home() {
     <div className="flex flex-col gap-6">
       <GachaStage pools={pools} />
 
-      <div className="dim text-center text-xs">
-        稀有度由個股近 30 個交易日漲跌幅決定（企劃書 1.2）　|　
-        <Link href="/history" className="underline hover:text-[var(--ink)]">
+      {/* 手機優先：改為可換行的 flex，連結加大點擊區 */}
+      <div className="dim flex flex-wrap items-center justify-center gap-x-4 gap-y-1 px-2 text-center text-xs">
+        <span className="basis-full">
+          稀有度由個股近 30 個交易日漲跌幅決定（企劃書 1.2）
+        </span>
+        <Link href="/history" className="py-1 underline hover:text-[var(--ink)]">
           抽卡紀錄
         </Link>
-        　|　
-        <Link href="/pools" className="underline hover:text-[var(--ink)]">
+        <Link href="/pools" className="py-1 underline hover:text-[var(--ink)]">
           卡池列表
         </Link>
-        　|　
-        <Link href="/odds" className="underline hover:text-[var(--ink)]">
+        <Link href="/odds" className="py-1 underline hover:text-[var(--ink)]">
           機率說明
         </Link>
       </div>
