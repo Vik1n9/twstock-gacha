@@ -1,4 +1,4 @@
-import { db } from "../db/client";
+import { getDb } from "../db/client";
 import {
   boards,
   drawRecords as drawRecordsTable,
@@ -48,6 +48,7 @@ export async function draw(
   poolId: string,
   drawType: DrawType,
 ): Promise<{ ok: true; outcome: DrawOutcome } | { ok: false; error: DrawError }> {
+  const db = await getDb();
   const [pool] = await db.select().from(pools).where(eq(pools.poolId, poolId));
   if (!pool) return { ok: false, error: { code: "POOL_NOT_FOUND" } };
 

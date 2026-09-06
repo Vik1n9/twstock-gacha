@@ -60,8 +60,10 @@ npx wrangler d1 execute twstock-gacha --local --file ./drizzle/0000_init-d1.sql 
 npm run seed                   # 16 板塊 + 全市場池 + 上市普通股 + 板塊映射（經 D1 HTTP API）
 npm run backfill               # 回填 60 日曆天收盤價 + 計算漲跌幅
 npm run snapshot               # 生成最新交易日快照（可 --date YYYY-MM-DD）
-npm run dev:vinext             # http://localhost:3001（Vite dev）
-npm run start:vinext           # 以 wrangler dev 跑建置後的 Worker（本機 D1，port 8787）
+npm run dev                    # http://localhost:3001（vinext dev）
+npm run build                  # Vite 多環境建置（client + RSC + SSR）
+npm run start                  # 以 wrangler dev 跑建置後的 Worker（本機 D1，port 8787）
+npm run cf-typegen             # wrangler.jsonc 改動後重新產生 worker-configuration.d.ts
 npm test                       # 單元測試（稀有度/快照/抽卡引擎）
 npx tsx scripts/verify-odds.ts [-- --pool POOL_AI]  # 對真實快照模擬 30 萬抽驗機率
 ```
@@ -73,8 +75,8 @@ npx tsx scripts/verify-odds.ts [-- --pool POOL_AI]  # 對真實快照模擬 30 �
 ## 部署（Cloudflare Workers + D1）
 
 ```bash
-npm run build:vinext     # Vite 多環境建置（client + RSC + SSR）
-npm run deploy:vinext    # 部署到 Cloudflare Workers（含 cron trigger）
+npm run build            # Vite 多環境建置（client + RSC + SSR）
+npm run deploy           # 部署到 Cloudflare Workers（含 cron trigger）
 ```
 
 1. 建資源：`npx wrangler d1 create twstock-gacha`、`npx wrangler kv namespace create VINEXT_KV_CACHE`，
@@ -85,6 +87,11 @@ npm run deploy:vinext    # 部署到 Cloudflare Workers（含 cron trigger）
 4. 密鑰：`npx wrangler secret put CRON_SECRET`。
 5. Cron：`wrangler.jsonc` `triggers.crons`＝`0 10 * * 1-5`（平日台北 18:00，與原 Vercel 排程相同）。
    手動觸發：`curl -H "Authorization: Bearer $CRON_SECRET" https://<worker>.workers.dev/api/cron/snapshot`。
+   `observability` 已開啟，cron 失敗會留在 Workers Logs（`npx wrangler tail`）。
+
+> 型別：綁定型別由 `npm run cf-typegen`（`wrangler types`）產生到 `worker-configuration.d.ts`
+> 並入版控，改動 `wrangler.jsonc` 後要重跑。`CRON_SECRET` 是 `wrangler secret put` 設的機密，
+> 不在 wrangler 設定內，故補宣告於 `types/env.d.ts`。
 
 ## 部署（Vercel + Neon，main 分支）
 

@@ -14,6 +14,11 @@
   "cache": {
     "enabled": true
   },
+  // Workers Logs：cron 一天只跑一次，失敗必須留下紀錄才看得到
+  // （worker/index.ts 的 scheduled() 會在 >=400 時 throw）
+  "observability": {
+    "enabled": true
+  },
   "version_metadata": {
     "binding": "CF_VERSION_METADATA"
   },

@@ -8,7 +8,6 @@ async function main() {
   const { generatePoolSnapshots, latestTradingDate } = await import(
     "../lib/pool/generate"
   );
-  await import("../lib/db/client");
 
   const dateIdx = process.argv.indexOf("--date");
   const date =

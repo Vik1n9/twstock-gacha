@@ -105,7 +105,8 @@ async function dryRun(): Promise<void> {
 }
 
 async function seedToDb(): Promise<void> {
-  const { db } = await import("../lib/db/client");
+  const { getDb } = await import("../lib/db/client");
+  const db = await getDb();
   const { boards, pools, stocks, stockBoards } = await import("../lib/db/schema");
   const { and, eq, notInArray } = await import("drizzle-orm");
 

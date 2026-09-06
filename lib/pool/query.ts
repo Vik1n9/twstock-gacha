@@ -1,6 +1,6 @@
 import "server-only";
 import { unstable_cache } from "next/cache";
-import { db } from "@/lib/db/client";
+import { getDb } from "@/lib/db/client";
 import { boards, poolSnapshots, pools, snapshotStocks } from "@/lib/db/schema";
 import { BOARD_MAP, MARKET_POOL } from "@/lib/sectors/defs";
 import type { PoolInfo, PoolSnapshotInfo } from "@/lib/api/types";
@@ -22,6 +22,7 @@ export const POOLS_CACHE_TAG = "pools";
 const CACHE_TTL_SECONDS = 600;
 
 async function loadActivePools(withRarityCounts: boolean): Promise<PoolInfo[]> {
+  const db = await getDb();
   const activePools = await db
     .select()
     .from(pools)
@@ -137,6 +138,7 @@ async function loadRarityCounts(
   const poolIds = [...new Set(targets.map((t) => t.poolId))];
   const wanted = new Set(targets.map((t) => `${t.snapshotDate}|${t.poolId}`));
 
+  const db = await getDb();
   const rows = await db
     .select({
       poolId: snapshotStocks.poolId,
