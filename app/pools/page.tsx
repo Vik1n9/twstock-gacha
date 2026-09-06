@@ -38,7 +38,7 @@ export default async function PoolsPage() {
                   </div>
                 </div>
                 <span
-                  className="rounded px-2 py-0.5 text-xs font-bold"
+                  className="shrink-0 whitespace-nowrap rounded px-2 py-0.5 text-xs font-bold"
                   style={{
                     color: open ? "var(--up)" : "var(--ink-dim)",
                     border: `1px solid ${open ? "var(--up)" : "var(--line)"}`,
