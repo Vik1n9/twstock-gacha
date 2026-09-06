@@ -16,7 +16,9 @@ import { RARITY_COLOR, RARITY_RANK, type Rarity, topRarity } from "@/lib/fx/core
 type Phase = "idle" | "preroll" | "reveal" | "summary";
 type DrawType = "single" | "ten";
 
-const PREROLL_MS = 2900;
+// 前置演出長度不再固定：PreRoll 會等抽卡結果回來才演稀有度預告／跳變昇格，
+// 因此由它的 onDone 通知結束；PREROLL_MAX_MS 只是 onDone 沒來時的保險上限。
+const PREROLL_MAX_MS = 12000;
 const POOL_PREF_KEY = "twstock-pool";
 
 // 卡池偏好（localStorage）：useSyncExternalStore 模式，SSR 回 null、客戶端讀偏好
@@ -109,36 +111,46 @@ export function GachaStage({ pools }: { pools: PoolInfo[] }) {
   const stageRef = useRef<HTMLDivElement>(null);
   const fxRef = useRef<RevealFxHandle>(null);
   const skipRef = useRef(false);
+  // 這一輪抽卡的序號：關閉演出會遞增，讓還在等待的 start() 知道自己已作廢
+  const runRef = useRef(0);
+  const prerollDoneRef = useRef<(() => void) | null>(null);
 
   // 企劃書 13.1 步驟 4：板塊內股票代號快速流動（演出用範例碼）
   const tickerCodes = ["2330", "2303", "2454", "3034", "2308", "2408", "6770", "3711", "6509", "8081"];
 
   const impact = useCallback(
     (x: number, y: number, rarity: Rarity, jumpFrom?: "R" | "SR" | null) => {
-      // 跳變兩段式爆點：先低階色小爆，短暫停頓後結果色正式爆開
+      // 跳變三段式爆點：低階色爆開 → 能量向內塌陷收走 → 結果色正式炸開。
+      // 中間夾一記內爆是關鍵：少了它，兩發爆點只像同一個特效放兩次。
       if (jumpFrom) {
         fxRef.current?.burst(x, y, jumpFrom);
-        setTimeout(() => fxRef.current?.burst(x, y, rarity), low ? 90 : 170);
+        setTimeout(() => fxRef.current?.implode(x, y, rarity), 140);
+        setTimeout(() => fxRef.current?.burst(x, y, rarity), 340);
       } else {
         fxRef.current?.burst(x, y, rarity);
       }
-      // 高稀有度翻開時，背景跟著往上推一段
-      if (RARITY_RANK[rarity] >= 2) {
-        setBoost(RARITY_RANK[rarity] >= 3 ? 1 : 0.7);
-        setTimeout(() => setBoost(0.28), 700);
+      // 高稀有度翻開時，背景跟著往上推一段（跳變再多推一級）
+      if (RARITY_RANK[rarity] >= 2 || jumpFrom) {
+        const peak = RARITY_RANK[rarity] >= 3 || jumpFrom ? 1 : 0.7;
+        setBoost(peak);
+        setTimeout(() => setBoost(0.28), jumpFrom ? 1000 : 700);
       }
     },
-    [low],
+    [],
   );
 
-  // PreRoll 跳變瞬間：畫面中央先炸一發結果色（RevealFx 層在前置演出之上）
+  // PreRoll 撕裂瞬間：畫面中央先收束再炸開（RevealFx 層在前置演出之上）
   const fireJump = useCallback((rarity: Rarity) => {
-    fxRef.current?.burst(window.innerWidth / 2, window.innerHeight / 2, rarity);
+    const x = window.innerWidth / 2;
+    const y = window.innerHeight / 2;
+    fxRef.current?.implode(x, y, rarity);
+    setTimeout(() => fxRef.current?.burst(x, y, rarity), 120);
   }, []);
 
   const start = useCallback(
     async (type: DrawType) => {
       if (!pool?.poolId || busy) return;
+      const runId = ++runRef.current;
       setBusy(true);
       setError(null);
       setOutcome(null);
@@ -175,7 +187,23 @@ export function GachaStage({ pools }: { pools: PoolInfo[] }) {
         return r;
       });
 
-      const [res] = await Promise.all([pending, sleep(low ? 150 : PREROLL_MS)]);
+      // 前置演出自己決定何時結束（它會等結果回來才演預告／昇格）；
+      // onDone 沒來（元件被卸載等）時以 PREROLL_MAX_MS 保底。
+      const prerollDone = new Promise<void>((resolve) => {
+        prerollDoneRef.current = resolve;
+      });
+      const [res] = await Promise.all([
+        pending,
+        low
+          ? sleep(150)
+          : Promise.race([prerollDone, sleep(PREROLL_MAX_MS)]),
+      ]);
+      prerollDoneRef.current = null;
+      // 演出期間玩家按了關閉 → 這一輪作廢，別把畫面拉回演出層
+      if (runId !== runRef.current) {
+        setBusy(false);
+        return;
+      }
       if (!res.ok) {
         setError(res.error);
         setPhase("idle");
@@ -193,6 +221,9 @@ export function GachaStage({ pools }: { pools: PoolInfo[] }) {
   );
 
   const close = () => {
+    runRef.current += 1;
+    prerollDoneRef.current?.();
+    prerollDoneRef.current = null;
     setPhase("idle");
     setOutcome(null);
     setDetail(null);
@@ -387,7 +418,9 @@ export function GachaStage({ pools }: { pools: PoolInfo[] }) {
               onBoost={setBoost}
               onJump={fireJump}
               onDone={() => {
-                /* 演出長度由 start() 的 Promise.all 控制 */
+                // 前置演出跑完（含等結果與昇格段）才放行 start() 進入翻牌
+                prerollDoneRef.current?.();
+                prerollDoneRef.current = null;
               }}
             />
           )}

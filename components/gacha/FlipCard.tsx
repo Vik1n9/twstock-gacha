@@ -165,6 +165,9 @@ export function FlipCard({
     });
 
     // 4) 落定回彈 + 稀有度光環擴散
+    //    跳變卡：光環與光暈延到上層的「昇格爆點」才落下（見 GachaStage.impact 的
+    //    低階爆 → 內爆收束 → 結果色爆三段），中間空出一拍才有翻盤的落差感。
+    const ringAt = jumpFrom ? "<+=0.34" : "<";
     tl.fromTo(
       tilt,
       { scale: 1 },
@@ -175,13 +178,19 @@ export function FlipCard({
         ring,
         { autoAlpha: 0.9, scale: 0.5 },
         { autoAlpha: 0, scale: 2.9, duration: 0.75, ease: "power2.out" },
-        "<",
+        ringAt,
       )
       .to(
         aura,
         { autoAlpha: 0.14 + fx.tier * 0.12, scale: 1, duration: 0.5 },
-        "<",
+        ringAt,
       );
+
+    // 跳變卡：昇格爆點落下時再補一記推撞，卡片被「頂」了一下
+    if (jumpFrom) {
+      tl.to(tilt, { scale: 1.18, duration: 0.1, ease: "power3.out" }, ringAt)
+        .to(tilt, { scale: 1, duration: 0.55, ease: "elastic.out(1, 0.42)" });
+    }
 
     // 5) 常駐呼吸：光暈與卡面極輕微浮動
     tl.to(aura, {
