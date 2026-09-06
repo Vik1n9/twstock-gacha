@@ -1,17 +1,13 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState, useSyncExternalStore } from "react";
-import { SectorBackdrop } from "./SectorBackdrop";
-import { PreRoll } from "./PreRoll";
-import { FlipCard } from "./FlipCard";
-import { WaferGrid } from "./WaferGrid";
-import { WaferBurst } from "./WaferBurst";
-import { Resonance } from "./Resonance";
-import { RevealFx, type RevealFxHandle } from "./RevealFx";
+// 演出元件一律以動態 import 取得（見下方 loadFx）；此處只留型別，型別會被編譯抹除
+import type { RevealFxHandle } from "./RevealFx";
 import { StockCardFace, fmtPct } from "@/components/cards/StockCard";
-import { CardDetail, type CardDetailData } from "@/components/cards/CardDetail";
+import type { CardDetailData } from "@/components/cards/CardDetail";
 import { appendOutcome } from "@/lib/history/store";
 import { useLowFx } from "@/lib/hooks/useLowFx";
+import { useIdlePreload } from "@/lib/hooks/useIdlePreload";
 import type { DrawCard, DrawOutcome, PoolInfo } from "@/lib/api/types";
 import type { SectorTheme } from "@/lib/sectors/defs";
 import { MARKET_POOL, placeholder as fallbackTheme } from "@/lib/sectors/defs";
@@ -54,6 +50,11 @@ function subscribePoolPref(listener: () => void): () => void {
 
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
 
+// 演出層（GSAP ＋ canvas 特效，約 85 KB）不進首屏 bundle：改為抽卡才需要的
+// 獨立 chunk。瀏覽器閒置時先背景預載，start() 再保證載完才切換 phase，
+// 因此按下抽卡通常是零等待，且不會出現元件還沒到就先切畫面的閃爍。
+const loadFx = () => import("./performance");
+
 // 「客戶端已掛載」訊號：hydration 期間回 false，之後回 true。
 // 用於區分 server render／hydration commit 與真正讀到客戶端狀態的時機。
 const mountedSubscribe = () => () => {};
@@ -86,6 +87,8 @@ export function GachaStage({ pools }: { pools: PoolInfo[] }) {
   // 跳變演出：結果含 jumpFrom 標記的最高稀有卡時，前置演出先以低階色蓄力再跳升
   const [jumpFrom, setJumpFrom] = useState<"R" | "SR" | null>(null);
   const [detail, setDetail] = useState<CardDetailData | null>(null);
+  // 演出元件模組（閒置預載 + 需要時 ensureFx 保證就緒）；idle 畫面完全不需要它
+  const [fx, ensureFx] = useIdlePreload(loadFx);
   const [low] = useLowFx();
   // 企劃書 12.1：玩家可選擇卡池（記住上次選擇；未選時預設全市場池）
   const selectedPoolId = useSyncExternalStore(subscribePoolPref, getPoolPref, () => null);
@@ -142,6 +145,18 @@ export function GachaStage({ pools }: { pools: PoolInfo[] }) {
       setHint(null);
       setJumpFrom(null);
       setDrawType(type);
+
+      // 演出元件就緒才切 phase（閒置預載通常已完成，此處多半是零等待）；
+      // 期間 busy 為 true，抽卡鍵維持 disabled。
+      try {
+        await ensureFx();
+      } catch {
+        // 斷網或 chunk 取不到：放開 busy 讓玩家能重試，不要卡死抽卡鍵
+        setError("演出資源載入失敗，請確認網路後再試一次。");
+        setBusy(false);
+        return;
+      }
+
       setPhase("preroll");
       setBoost(0.18);
       skipRef.current = false;
@@ -174,7 +189,7 @@ export function GachaStage({ pools }: { pools: PoolInfo[] }) {
       setBoost(skipRef.current ? 0.12 : 0.34);
       setBusy(false);
     },
-    [pool, busy, low],
+    [pool, busy, low, ensureFx],
   );
 
   const close = () => {
@@ -257,6 +272,7 @@ export function GachaStage({ pools }: { pools: PoolInfo[] }) {
               type="button"
               disabled={!pool?.snapshot?.isOpen || busy}
               onClick={() => start("single")}
+              onPointerEnter={() => void ensureFx().catch(() => {})}
               className="flex-1 rounded-xl border-2 px-4 py-3 text-lg font-bold transition hover:brightness-125 disabled:opacity-40"
               style={{
                 borderColor: theme.primary,
@@ -270,6 +286,7 @@ export function GachaStage({ pools }: { pools: PoolInfo[] }) {
               type="button"
               disabled={!pool?.snapshot?.isOpen || busy}
               onClick={() => start("ten")}
+              onPointerEnter={() => void ensureFx().catch(() => {})}
               className="flex-1 rounded-xl px-4 py-3 text-lg font-bold text-black transition hover:brightness-110 disabled:opacity-40"
               style={{
                 background: `linear-gradient(120deg, ${theme.accent}, ${theme.primary})`,
@@ -303,6 +320,10 @@ export function GachaStage({ pools }: { pools: PoolInfo[] }) {
   }
 
   // 演出層（preroll / reveal / summary）
+  // start() 已 await ensureFx()，正常不會落到這個 guard；純為型別收斂與保險
+  if (!fx) return null;
+  const { SectorBackdrop, PreRoll, FlipCard, WaferGrid, WaferBurst, Resonance, RevealFx, CardDetail } = fx;
+
   const cards = outcome?.cards ?? [];
   const sorted = [...cards].sort(
     (a, b) =>

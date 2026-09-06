@@ -94,6 +94,17 @@ npx tsx scripts/verify-odds.ts [-- --pool POOL_AI]  # 對真實快照模擬 30 �
 卡池資料每個交易日只在 cron 快照後變動一次，故 1、2 以 `unstable_cache`
 （tag `pools`）快取；`/api/cron/snapshot` 生成新快照後會 `revalidateTag` 失效。
 
+前端 JS 同樣分階段：GSAP 與所有演出元件集中在 `components/gacha/performance.ts`，
+由 `lib/hooks/useIdlePreload.ts` 動態載入 —— 首屏不下載，瀏覽器閒置時才背景取，
+按下抽卡（或在 `/history` 點卡片）時才保證就緒。**新增演出元件時記得一併加進
+`performance.ts` 匯出**，否則它會被靜態 import 拉回首屏。
+
+| 頁面 | 首屏 route JS |
+|---|---:|
+| `/` | 51 KB（原 166 KB） |
+| `/history` | 36 KB（原 125 KB） |
+| 演出 chunk（GSAP＋特效，兩頁共用） | 85 KB，延後載入 |
+
 ## 已知限制（beta）
 
 - 漲跌幅使用**原始收盤價**：個股除權息日會被視為下跌（後續可改用還原股價，FinMind `TaiwanStockPriceAdj`）。
