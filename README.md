@@ -2,7 +2,7 @@
 
 **線上版**：https://twstock-gacha.twstock-gacha.workers.dev
 
-以真實台股行情驅動的抽卡網頁遊戲。卡片稀有度由個股**近 30 個交易日漲跌幅**決定，並實作板塊卡池系統（企劃書 v1.1，見 `docs/`）。
+以真實台股行情驅動的抽卡網頁遊戲。卡片稀有度由個股**近 30 個交易日漲跌幅**決定，並實作板塊卡池系統（企劃書 v1.1）。
 
 **Beta 版範圍**：16 板塊池＋全市場池全數上線（上市普通股 1,084 檔）；板塊分類採「TWSE 產業別＋主題合併」（企劃書 3.1），AI 池為人工策展主題池；首頁卡池切換器；全市場池方向機率固定 50/50。精選池、還原股價為後續項目。
 
@@ -89,10 +89,7 @@ npm run deploy           # 部署到 Cloudflare Workers（含 cron trigger）
 2. 建表：`npx wrangler d1 execute twstock-gacha --remote --file ./drizzle/0000_init-d1.sql --yes`，
    接著依序套用 `drizzle/` 下編號較大的 migration（目前為 `0001_pool-snapshots-pool-idx.sql`）。
    schema 異動後以 `npm run db:generate` 產生新的 migration，部署前記得對 `--remote` 套用。
-3. 資料：從零開始用 `npm run seed` + `npm run backfill`；若要從舊的 Postgres 搬資料，
-   `npm run migrate:dump` 會產生 `drizzle/d1-migration.sql`，再以
-   `npx wrangler d1 execute twstock-gacha --remote --file drizzle/d1-migration.sql --yes` 匯入
-   （一次性工具，執行期不使用）。
+3. 資料：`npm run seed` + `npm run backfill`。
 4. 密鑰：`npx wrangler secret put CRON_SECRET`。
 5. Cron：`wrangler.jsonc` `triggers.crons`＝`0 10 * * 1-5`（平日台北 18:00）。
    手動觸發：`curl -H "Authorization: Bearer $CRON_SECRET" https://<worker>.workers.dev/api/cron/snapshot`。
@@ -229,10 +226,9 @@ Workers Free 每日 100,000 列、Workers Paid 每月內含 5,000 萬列。
 - 漲跌幅使用**原始收盤價**：個股除權息日會被視為下跌（後續可改用還原股價，FinMind `TaiwanStockPriceAdj`）。
 - 興櫃、上櫃、ETF、權證、TDR 未納入；僅上市普通股（部分知名 AI 概念股如群聯/信驊/雙鴻屬上櫃，故不在池內）。
 - 板塊共振：板塊池以「同方向」計數；全市場池卡為混合板塊，已改回企劃書 15.3「同板塊 5+/8+」規則。
-- 特效分派點（每池不同背景母題、十連排列、SSR 簽名）仍吃 SEMI 預設行為，僅主題色隨池切換（見 `docs/卡片與卡池擴充規範.md` §5）。
+- 特效分派點（每池不同背景母題、十連排列、SSR 簽名）仍吃 SEMI 預設行為，僅主題色隨池切換。
 - TWSE 速率未公開規範，回填已節流（400ms/請求）；過度頻繁可能被暫時擋下。
-- 抽卡紀錄（`/history`）存在瀏覽器 localStorage，換裝置或清除瀏覽資料就會消失；
-  導入帳號後的遷移路徑見 `docs/卡片與卡池擴充規範.md` §8。
+- 抽卡紀錄（`/history`）存在瀏覽器 localStorage，換裝置或清除瀏覽資料就會消失。
 
 ## 授權
 

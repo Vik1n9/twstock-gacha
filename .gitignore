@@ -56,6 +56,3 @@ next-env.d.ts
 # skills 工具安裝物（可用 npx skills add 重裝）
 .agents/
 skills-lock.json
-
-# 產生的資料遷移 dump（npm run migrate:dump 重新產生）
-drizzle/d1-migration.sql
