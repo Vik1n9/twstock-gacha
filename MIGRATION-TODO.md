@@ -17,33 +17,20 @@
 
 ---
 
-## 1. Cloudflare Worker 的部署分支 ⚠️ 先做這項
+## 1. ~~Cloudflare Worker 的部署分支~~ — ✅ 前提不成立，無需處理（2026-09-06）
 
-**現況**：Git 整合仍追蹤 `cloudflare-d1`。若不改，**推送到 `main` 的更新不會自動部署**。
+Dashboard 實際顯示此 Worker **未繫結任何 Git 整合**（部署清單中的
+"Unknown (deployment)" 皆為手動 `wrangler deploy`）。因此：
 
-Dashboard → Workers & Pages → `twstock-gacha` → Settings → Build／Git 整合，
-把追蹤分支由 `cloudflare-d1` 改為 `main`。
+- 目前部署方式＝手動 `npm run deploy:vinext`，main 推送不會自動部署
+- `cloudflare-d1` 已於 2026-09-06 刪除（已完整併入 main，無綁定依賴）
+- 若要自動部署，可選：
+  - **GitHub Actions**：push 到 main 時跑 `npm run deploy:vinext`（repo secret 放 `CLOUDFLARE_API_TOKEN`，需 Workers Scripts Edit 權限）
+  - 或 Dashboard 手動接上 Workers Builds（Git 整合）
 
-> 這項必須排在「刪除 `cloudflare-d1`」之前，否則整合會指向不存在的分支。
+## 2. ~~Vercel 專案的 Git 連結~~ — ✅ 已完成（2026-09-06）
 
-驗證：推一個 commit 到 `main`，確認觸發建置且 `x-vinext-build-id` 有變。
-
-```bash
-curl -sI https://twstock-gacha.twstock-gacha.workers.dev/ | grep -i x-vinext-build-id
-```
-
----
-
-## 2. Vercel 專案的 Git 連結
-
-**現況**：Vercel 仍連著本 repo。`main` 已移除 `vercel.json`，預設會跑
-`npm run build`（＝`vinext build`，產物 `dist/`），Vercel 期待 `.next`，**必定失敗**。
-
-Dashboard → `twstock-gacha` → Settings → Git，二擇一：
-
-- **Disconnect**（若不再需要 Vercel），或
-- 把 Production Branch 改為 `archive/vercel-neon`
-  （該分支的 `build` 仍是 `next build`，可正常部署，剛好作為庫存備份）
+已於 Dashboard 斷開 Vercel 連結。
 
 ---
 
@@ -78,7 +65,7 @@ SEARCH pool_snapshots USING INDEX pool_snapshots_pool_idx (pool_id=?)
 
 **待處理**：
 
-- `cloudflare-d1`：**先做完第 1 項**（Workers Git 整合改追蹤 `main`）再刪，否則整合指向不存在的分支
+- ~~`cloudflare-d1`~~ 已刪除（2026-09-06，Git 整合確認不存在後無依賴）
 - `claude/happy-lamport-62xqyi`：有一個 main 沒有的 commit `04cd9e9`
   （Postgres 時代的「DB client 延遲連線」修正）。該問題已由現行 `getDb()`（D1 雙模式）
   以不同方式解決，功能上已無價值——確認後可刪
