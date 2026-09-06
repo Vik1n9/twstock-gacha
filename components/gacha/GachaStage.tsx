@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState, useSyncExternalStore } from "react";
 import { SectorBackdrop } from "./SectorBackdrop";
 import { PreRoll } from "./PreRoll";
 import { FlipCard } from "./FlipCard";
@@ -12,17 +12,54 @@ import { StockCardFace, fmtPct } from "@/components/cards/StockCard";
 import { CardDetail, type CardDetailData } from "@/components/cards/CardDetail";
 import { appendOutcome } from "@/lib/history/store";
 import { useLowFx } from "@/lib/hooks/useLowFx";
-import type { DrawOutcome, PoolInfo } from "@/lib/api/types";
+import type { DrawCard, DrawOutcome, PoolInfo } from "@/lib/api/types";
 import type { SectorTheme } from "@/lib/sectors/defs";
-import { placeholder as fallbackTheme } from "@/lib/sectors/defs";
+import { MARKET_POOL, placeholder as fallbackTheme } from "@/lib/sectors/defs";
 import { RARITY_COLOR, RARITY_RANK, type Rarity, topRarity } from "@/lib/fx/core";
 
 type Phase = "idle" | "preroll" | "reveal" | "summary";
 type DrawType = "single" | "ten";
 
 const PREROLL_MS = 2900;
+const POOL_PREF_KEY = "twstock-pool";
+
+// 卡池偏好（localStorage）：useSyncExternalStore 模式，SSR 回 null、客戶端讀偏好
+const poolPrefListeners = new Set<() => void>();
+function getPoolPref(): string | null {
+  try {
+    return localStorage.getItem(POOL_PREF_KEY);
+  } catch {
+    return null;
+  }
+}
+function setPoolPref(id: string): void {
+  try {
+    localStorage.setItem(POOL_PREF_KEY, id);
+  } catch {
+    /* 配額或隱私模式：不影響本次選擇 */
+  }
+  poolPrefListeners.forEach((l) => l());
+}
+function subscribePoolPref(listener: () => void): () => void {
+  poolPrefListeners.add(listener);
+  const onStorage = (e: StorageEvent) => {
+    if (e.key === POOL_PREF_KEY) listener();
+  };
+  window.addEventListener("storage", onStorage);
+  return () => {
+    poolPrefListeners.delete(listener);
+    window.removeEventListener("storage", onStorage);
+  };
+}
 
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
+
+// 「客戶端已掛載」訊號：hydration 期間回 false，之後回 true。
+// 用於區分 server render／hydration commit 與真正讀到客戶端狀態的時機。
+const mountedSubscribe = () => () => {};
+function useMounted(): boolean {
+  return useSyncExternalStore(mountedSubscribe, () => true, () => false);
+}
 
 async function fetchDraw(
   poolId: string,
@@ -48,14 +85,25 @@ export function GachaStage({ pools }: { pools: PoolInfo[] }) {
   const [hint, setHint] = useState<Rarity | null>(null);
   const [detail, setDetail] = useState<CardDetailData | null>(null);
   const [low] = useLowFx();
+  // 企劃書 12.1：玩家可選擇卡池（記住上次選擇；未選時預設全市場池）
+  const selectedPoolId = useSyncExternalStore(subscribePoolPref, getPoolPref, () => null);
+  const selectPool = useCallback((id: string) => setPoolPref(id), []);
+
+  const selected = selectedPoolId
+    ? pools.find((p) => p.poolId === selectedPoolId)
+    : null;
+  // 預設卡池＝全市場池（永久開放，企劃書 2.1）；玩家選過才跟隨選擇
+  const fallbackPool =
+    pools.find((p) => p.poolId === MARKET_POOL.poolId) ??
+    pools.find((p) => p.snapshot?.isOpen) ??
+    pools[0];
+  const pool = (selected?.snapshot?.isOpen ? selected : null) ?? fallbackPool;
+  const theme: SectorTheme = pool?.board?.theme ?? fallbackTheme;
+  const boardName = pool?.board?.tagName ?? "";
 
   const stageRef = useRef<HTMLDivElement>(null);
   const fxRef = useRef<RevealFxHandle>(null);
   const skipRef = useRef(false);
-
-  const pool = pools.find((p) => p.snapshot?.isOpen) ?? pools[0];
-  const theme: SectorTheme = pool?.board?.theme ?? fallbackTheme;
-  const boardName = pool?.board?.tagName ?? "";
 
   // 企劃書 13.1 步驟 4：板塊內股票代號快速流動（演出用範例碼）
   const tickerCodes = ["2330", "2303", "2454", "3034", "2308", "2408", "6770", "3711", "6509", "8081"];
@@ -125,69 +173,100 @@ export function GachaStage({ pools }: { pools: PoolInfo[] }) {
 
   if (phase === "idle") {
     return (
-      <div className="panel relative overflow-hidden p-6 text-center">
+      <>
+        {/* 主頁背景隨卡池主題變色：底色平滑過渡＋頂部光暈淡入，讓玩家知道選到哪一池 */}
         <div
-          className="pointer-events-none absolute inset-x-0 top-0 h-px"
-          style={{ background: `linear-gradient(90deg, transparent, ${theme.accent}, transparent)` }}
-        />
-        {/* 企劃書 12.1：抽卡按鈕顯示目前卡池 */}
-        <div className="dim text-xs tracking-widest">目前卡池</div>
-        <div
-          className="mt-1 text-2xl font-black"
+          aria-hidden
+          className="pointer-events-none fixed inset-0 -z-10 transition-colors duration-700"
           style={{
-            color: theme.primary,
-            textShadow: `0 0 26px color-mix(in srgb, ${theme.primary} 55%, transparent)`,
+            backgroundColor: `color-mix(in srgb, ${theme.primary} 15%, transparent)`,
           }}
-        >
-          {pool ? pool.poolName : "讀取中…"}
-        </div>
-        {pool?.snapshot && (
-          <div className="dim mt-1 text-xs">
-            資料日 {pool.snapshot.snapshotDate}　|　可抽 {pool.snapshot.stockCount} 檔　|　漲{" "}
-            {pool.snapshot.upStockCount} / 跌 {pool.snapshot.downStockCount}
-          </div>
-        )}
+        />
+        <div
+          key={pool?.poolId ?? "none"}
+          aria-hidden
+          className="bg-glow-in pointer-events-none fixed inset-0 -z-10"
+          style={{
+            background: `radial-gradient(ellipse 90% 46% at 50% -8%, color-mix(in srgb, ${theme.primary} 38%, transparent), transparent 72%)`,
+          }}
+        />
+        <div className="panel relative overflow-hidden p-6 text-center">
+          <div
+            className="pointer-events-none absolute inset-x-0 top-0 h-px"
+            style={{ background: `linear-gradient(90deg, transparent, ${theme.accent}, transparent)` }}
+          />
 
-        <RarityLegend />
-
-        <div className="mt-5 flex items-center justify-center gap-4">
-          <button
-            type="button"
-            disabled={!pool?.snapshot?.isOpen || busy}
-            onClick={() => start("single")}
-            className="min-w-36 rounded-xl border-2 px-8 py-3 text-lg font-bold transition hover:brightness-125 disabled:opacity-40"
+          {/* 企劃書 12.1：抽卡按鈕顯示目前卡池 */}
+          <div className="dim text-xs tracking-widest">目前卡池</div>
+          <div
+            className="mt-1 text-2xl font-black"
             style={{
-              borderColor: theme.primary,
               color: theme.primary,
-              boxShadow: `0 0 24px color-mix(in srgb, ${theme.primary} 28%, transparent)`,
+              textShadow: `0 0 26px color-mix(in srgb, ${theme.primary} 55%, transparent)`,
             }}
           >
-            單抽
-          </button>
-          <button
-            type="button"
-            disabled={!pool?.snapshot?.isOpen || busy}
-            onClick={() => start("ten")}
-            className="min-w-36 rounded-xl px-8 py-3 text-lg font-bold text-black transition hover:brightness-110 disabled:opacity-40"
-            style={{
-              background: `linear-gradient(120deg, ${theme.accent}, ${theme.primary})`,
-              boxShadow: `0 0 30px color-mix(in srgb, ${theme.accent} 40%, transparent)`,
-            }}
-          >
-            十連抽
-          </button>
+            {pool ? pool.poolName : "讀取中…"}
+          </div>
+          {pool?.board?.description && (
+            <div className="dim mt-1 text-xs">{pool.board.description}</div>
+          )}
+          {pool?.snapshot && (
+            <div className="dim mt-1 text-xs">
+              資料日 {pool.snapshot.snapshotDate}　|　可抽 {pool.snapshot.stockCount} 檔　|　漲{" "}
+              {pool.snapshot.upStockCount} / 跌 {pool.snapshot.downStockCount}　|　30 日強度{" "}
+              {fmtPct(pool.snapshot.board30dStrength)}
+            </div>
+          )}
+
+          <RarityLegend />
+
+          <div className="mt-5 flex items-center justify-center gap-4">
+            <button
+              type="button"
+              disabled={!pool?.snapshot?.isOpen || busy}
+              onClick={() => start("single")}
+              className="w-36 rounded-xl border-2 px-8 py-3 text-lg font-bold transition hover:brightness-125 disabled:opacity-40"
+              style={{
+                borderColor: theme.primary,
+                color: theme.primary,
+                boxShadow: `0 0 24px color-mix(in srgb, ${theme.primary} 28%, transparent)`,
+              }}
+            >
+              單抽
+            </button>
+            <button
+              type="button"
+              disabled={!pool?.snapshot?.isOpen || busy}
+              onClick={() => start("ten")}
+              className="w-36 rounded-xl px-8 py-3 text-lg font-bold text-black transition hover:brightness-110 disabled:opacity-40"
+              style={{
+                background: `linear-gradient(120deg, ${theme.accent}, ${theme.primary})`,
+                boxShadow: `0 0 30px color-mix(in srgb, ${theme.accent} 40%, transparent)`,
+              }}
+            >
+              十連抽
+            </button>
+          </div>
+
+          {/* 企劃書 12.1 卡池選擇：抽卡鍵下方，左右循環滑動 */}
+          <PoolCarousel
+            pools={pools}
+            currentPoolId={pool?.poolId ?? null}
+            onSelect={selectPool}
+          />
+
+          {pool?.snapshot && !pool.snapshot.isOpen && (
+            <div className="mt-3 text-sm" style={{ color: "var(--down)" }}>
+              {pool.snapshot.reason ?? "今日未開放"}
+            </div>
+          )}
+          {error && (
+            <div className="mt-3 text-sm" style={{ color: "var(--up)" }}>
+              {error}
+            </div>
+          )}
         </div>
-        {pool?.snapshot && !pool.snapshot.isOpen && (
-          <div className="mt-3 text-sm" style={{ color: "var(--down)" }}>
-            {pool.snapshot.reason ?? "今日未開放"}
-          </div>
-        )}
-        {error && (
-          <div className="mt-3 text-sm" style={{ color: "var(--up)" }}>
-            {error}
-          </div>
-        )}
-      </div>
+      </>
     );
   }
 
@@ -262,7 +341,7 @@ export function GachaStage({ pools }: { pools: PoolInfo[] }) {
             <FlipCard
               card={cards[0]}
               theme={theme}
-              boardName={outcome?.boardName ?? null}
+              boardName={cards[0].boardName ?? outcome?.boardName ?? null}
               size={240}
               low={low}
               onImpact={impact}
@@ -286,7 +365,17 @@ export function GachaStage({ pools }: { pools: PoolInfo[] }) {
 
           {phase === "summary" && outcome && (
             <div className="relative w-full max-w-3xl">
-              <Resonance sameCount={maxDir} theme={theme} low={low} />
+              {/* 企劃書 15.3 板塊共振：全市場池卡為混合板塊，依同板塊計數；
+                  板塊池內同板塊恆成立，維持同方向計數 */}
+              <Resonance
+                sameCount={
+                  pool?.poolType === "market"
+                    ? maxGroupCount(cards, (c) => c.boardName ?? boardName)
+                    : maxDir
+                }
+                theme={theme}
+                low={low}
+              />
               {ssrCount > 0 && <WaferBurst theme={theme} low={low} />}
               <div className="relative z-10 max-h-[86vh] overflow-y-auto">
                 <div className="mb-4 text-center">
@@ -321,7 +410,6 @@ export function GachaStage({ pools }: { pools: PoolInfo[] }) {
                       onClick={() =>
                         setDetail({
                           ...c,
-                          boardName: outcome.boardName,
                           poolName: outcome.poolName,
                           snapshotDate: outcome.snapshotDate,
                         })
@@ -332,7 +420,7 @@ export function GachaStage({ pools }: { pools: PoolInfo[] }) {
                     >
                       <StockCardFace
                         card={c}
-                        boardName={outcome.boardName}
+                        boardName={c.boardName ?? outcome.boardName}
                         variant={drawType === "ten" ? "compact" : "full"}
                       />
                     </button>
@@ -373,9 +461,344 @@ export function GachaStage({ pools }: { pools: PoolInfo[] }) {
   );
 }
 
+// 同 key 計數取最大（全市場池板塊共振用，企劃書 15.3）
+function maxGroupCount(
+  cards: DrawCard[],
+  keyOf: (c: DrawCard) => string,
+): number {
+  const counts = new Map<string, number>();
+  let max = 0;
+  for (const c of cards) {
+    const k = keyOf(c);
+    const n = (counts.get(k) ?? 0) + 1;
+    counts.set(k, n);
+    if (n > max) max = n;
+  }
+  return max;
+}
+
+// 企劃書 12.1 卡池選擇：抽卡鍵下方、左右循環滑動（清單渲染三副本達成無縫循環）
+// 動畫：點選／箭頭平滑捲動居中；觸控走原生慣性，滑鼠可拖曳後平滑吸附；
+// 捲出中間副本範圍時瞬移回等價位置（視覺等價），形成循環。規範 §7：low/reduced-motion 走瞬時。
+function PoolCarousel({
+  pools,
+  currentPoolId,
+  onSelect,
+}: {
+  pools: PoolInfo[];
+  currentPoolId: string | null;
+  onSelect: (id: string) => void;
+}) {
+  const stripRef = useRef<HTMLDivElement>(null);
+  const dragRef = useRef<{ x: number; scroll: number } | null>(null);
+  const draggedRef = useRef(false);
+  const animatingRef = useRef(0); // 程式化平滑捲動的落定計時器
+  const [low] = useLowFx();
+
+  const behavior = useCallback((): ScrollBehavior => {
+    if (low) return "auto";
+    if (
+      typeof window !== "undefined" &&
+      window.matchMedia("(prefers-reduced-motion: reduce)").matches
+    ) {
+      return "auto";
+    }
+    return "smooth";
+  }, [low]);
+
+  // 取三副本中最接近目前視窗中心的那顆 chip（避免程式化捲動跨副本來回）
+  const nearestChip = useCallback((poolId?: string) => {
+    const el = stripRef.current;
+    if (!el) return null;
+    const chips = Array.from(
+      el.querySelectorAll<HTMLElement>(
+        poolId ? `[data-pool="${poolId}"]` : "[data-pool]",
+      ),
+    );
+    if (chips.length === 0) return null;
+    const center = el.scrollLeft + el.clientWidth / 2;
+    const dist = (c: HTMLElement) =>
+      Math.abs(c.offsetLeft + c.offsetWidth / 2 - center);
+    return chips.reduce((best, c) => (dist(c) < dist(best) ? c : best));
+  }, []);
+
+  // 等程式化平滑捲動落定：需先偵測到實際位移（UA 捲動有起步延遲，避免誤判），
+  // 再連續停滯兩次讀值即視為結束；上限 20 個 tick 保底
+  const waitSettle = useCallback(
+    (onSettled: () => void) => {
+      const el = stripRef.current;
+      if (!el) return;
+      window.clearTimeout(animatingRef.current);
+      const startX = el.scrollLeft;
+      let last = el.scrollLeft;
+      let stable = 0;
+      let ticks = 0;
+      let moved = false;
+      const tick = () => {
+        const cur = el.scrollLeft;
+        if (cur !== startX) moved = true;
+        if (moved && cur === last) stable++;
+        else if (cur !== last) stable = 0;
+        last = cur;
+        if ((moved && stable >= 2) || ++ticks > 20) {
+          animatingRef.current = 0;
+          onSettled();
+          return;
+        }
+        animatingRef.current = window.setTimeout(tick, 60);
+      };
+      animatingRef.current = window.setTimeout(tick, 60);
+    },
+    [],
+  );
+
+  // 循環修正：捲出中間副本範圍就瞬移回等價位置（scrollLeft 直接賦值＝瞬時）
+  // 步距用相鄰副本 offsetLeft 差實測——小卡固定寬度，此值即單一副本精確寬度
+  const correctLoop = useCallback(() => {
+    const el = stripRef.current;
+    if (!el) return;
+    const chips = Array.from(el.querySelectorAll<HTMLElement>("[data-pool]"));
+    const per = chips.length / 3;
+    if (!Number.isInteger(per) || per === 0) return;
+    const stride = chips[per].offsetLeft - chips[0].offsetLeft;
+    if (stride <= 0) return;
+    if (el.scrollLeft < stride * 0.3) el.scrollLeft += stride;
+    else if (el.scrollLeft > stride * 1.7) el.scrollLeft -= stride;
+  }, []);
+
+  const centerChip = useCallback(
+    (chip: HTMLElement) => {
+      const b = behavior();
+      if (b === "smooth") {
+        // 平滑置中：抑制循環修正直到落定（絕對目標位置不變，中途修正會震盪）
+        chip.scrollIntoView({ behavior: b, inline: "center", block: "nearest" });
+        waitSettle(correctLoop);
+      } else {
+        chip.scrollIntoView({ behavior: "auto", inline: "center", block: "nearest" });
+        correctLoop();
+      }
+    },
+    [behavior, correctLoop, waitSettle],
+  );
+
+  const onScroll = useCallback(() => {
+    if (animatingRef.current) return; // 程式化捲動中不修正（絕對目標不變，修正會震盪）
+    correctLoop();
+  }, [correctLoop]);
+
+  // 初始定位：等客戶端就緒（hydration 完成＋useSyncExternalStore 已讀到偏好）後，
+  // 瞬時置中目前池一次。不能在 hydration commit 就定位——當下偏好尚未讀到，
+  // currentPoolId 是父層解析的後備池（全市場），會把一次性 flag 燒在錯的池上，
+  // 之後讀到真正偏好就再也不會置中。之後的選池改變都走 centerChip 平滑動畫。
+  const didCenterRef = useRef(false);
+  const ready = useMounted();
+  useEffect(() => {
+    if (!ready || didCenterRef.current || !currentPoolId) return;
+    didCenterRef.current = true;
+    const el = stripRef.current;
+    if (!el) return;
+    const chips = el.querySelectorAll<HTMLElement>(
+      `[data-pool="${currentPoolId}"]`,
+    );
+    const chip = chips[1] ?? chips[0];
+    if (!chip) return;
+    el.scrollLeft =
+      chip.offsetLeft + chip.offsetWidth / 2 - el.clientWidth / 2;
+  }, [ready, currentPoolId]);
+
+  // 箭頭：把目前中央 chip 的左／右鄰居平滑置中，落定後選中（循環）
+  // 用「相鄰 chip」定位而非固定步距——各池名稱長度不同，固定步距會瞄不準
+  const nudge = useCallback(
+    (dir: 1 | -1) => {
+      const el = stripRef.current;
+      if (!el) return;
+      const chips = Array.from(el.querySelectorAll<HTMLElement>("[data-pool]"));
+      if (chips.length === 0) return;
+      const center = el.scrollLeft + el.clientWidth / 2;
+      const dist = (c: HTMLElement) =>
+        Math.abs(c.offsetLeft + c.offsetWidth / 2 - center);
+      const current = chips.reduce((best, c) =>
+        dist(c) < dist(best) ? c : best,
+      );
+      const idx = chips.indexOf(current);
+      const target = chips[(idx + dir + chips.length) % chips.length];
+      if (!target) return;
+      const b = behavior();
+      if (b === "smooth") {
+        target.scrollIntoView({ behavior: b, inline: "center", block: "nearest" });
+        waitSettle(() => {
+          correctLoop();
+          const chip = nearestChip();
+          if (chip?.dataset.pool) onSelect(chip.dataset.pool);
+        });
+      } else {
+        target.scrollIntoView({ behavior: "auto", inline: "center", block: "nearest" });
+        correctLoop();
+        if (target.dataset.pool) onSelect(target.dataset.pool);
+      }
+    },
+    [behavior, correctLoop, nearestChip, onSelect, waitSettle],
+  );
+
+  // 滑鼠拖曳（觸控裝置走原生滾動慣性，不攔）
+  // 注意：不可用 setPointerCapture——capture 會把 pointerup 導回 strip，
+  // 瀏覽器合成的 click 目標隨之變成 strip，chip 的 onClick 會失效
+  const onPointerDown = useCallback(
+    (e: React.PointerEvent<HTMLDivElement>) => {
+      if (e.pointerType !== "mouse") return;
+      const el = stripRef.current;
+      if (!el) return;
+      window.clearTimeout(animatingRef.current);
+      animatingRef.current = 0;
+      dragRef.current = { x: e.clientX, scroll: el.scrollLeft };
+      draggedRef.current = false;
+      const onMove = (ev: PointerEvent) => {
+        const drag = dragRef.current;
+        if (!drag || !el) return;
+        const dx = ev.clientX - drag.x;
+        if (Math.abs(dx) > 4) draggedRef.current = true;
+        el.scrollLeft = drag.scroll - dx;
+      };
+      const onUp = () => {
+        window.removeEventListener("pointermove", onMove);
+        window.removeEventListener("pointerup", onUp);
+        window.removeEventListener("pointercancel", onUp);
+        dragRef.current = null;
+        if (!draggedRef.current) return;
+        // 吸附：最接近中央的池設為選中並平滑置中
+        const chip = nearestChip();
+        if (chip?.dataset.pool) onSelect(chip.dataset.pool);
+        if (chip) centerChip(chip);
+      };
+      window.addEventListener("pointermove", onMove);
+      window.addEventListener("pointerup", onUp);
+      window.addEventListener("pointercancel", onUp);
+    },
+    [centerChip, nearestChip, onSelect],
+  );
+
+  // 拖曳結束落在同一顆 chip 時，click 不觸發選池（避免誤選滑過的 chip）
+  const onChipClickCapture = useCallback((e: React.MouseEvent) => {
+    if (!draggedRef.current) return;
+    e.preventDefault();
+    e.stopPropagation();
+    draggedRef.current = false;
+  }, []);
+
+  // 每池一張固定寬度小卡：寬度＝單抽＋十連抽鍵相加（144×2＋gap 16＝304px＝19rem），
+  // 與上方按鈕列左右緣完全對齊
+  const renderCard = (p: PoolInfo, copy: number) => {
+    const color = p.board?.theme?.primary ?? null;
+    const active = p.poolId === currentPoolId;
+    const hidden = copy !== 1; // 副本 0/2 只為循環服務，不互動
+    const snap = p.snapshot;
+    return (
+      <button
+        key={`${copy}-${p.poolId}`}
+        type="button"
+        data-pool={p.poolId}
+        disabled={hidden || undefined}
+        tabIndex={hidden ? -1 : undefined}
+        aria-hidden={hidden || undefined}
+        aria-pressed={active || undefined}
+        title={p.poolName}
+        onClick={() => {
+          if (hidden) return;
+          onSelect(p.poolId);
+          const chip = nearestChip(p.poolId);
+          if (chip) centerChip(chip);
+        }}
+        className={`w-[19rem] max-w-full shrink-0 rounded-xl border px-3.5 py-2.5 text-left transition hover:brightness-125 ${
+          active ? "" : "opacity-80"
+        }`}
+        style={{
+          borderColor:
+            active && color
+              ? color
+              : (color
+                  ? `color-mix(in srgb, ${color} 35%, transparent)`
+                  : "var(--line)"),
+          background:
+            active && color
+              ? `color-mix(in srgb, ${color} 14%, transparent)`
+              : undefined,
+          boxShadow:
+            active && color
+              ? `0 0 18px color-mix(in srgb, ${color} 30%, transparent)`
+              : undefined,
+        }}
+      >
+        <div className="flex items-center gap-2">
+          <i
+            aria-hidden
+            className="h-2.5 w-2.5 shrink-0 rotate-45 rounded-[2px]"
+            style={{
+              background: color ?? "var(--ink-dim)",
+              boxShadow: color ? `0 0 8px ${color}` : undefined,
+            }}
+          />
+          <span
+            className="truncate text-sm font-black"
+            style={{ color: color ?? undefined }}
+          >
+            {p.board?.tagName ?? p.poolName}
+          </span>
+          <span className="dim ml-auto shrink-0 text-[11px] tabular-nums">
+            可抽 {snap ? snap.stockCount : "–"} 檔
+          </span>
+        </div>
+        <div className="dim mt-1 flex items-center gap-2 pl-[18px] text-[11px] tabular-nums">
+          <span>
+            漲 {snap?.upStockCount ?? "–"} / 跌 {snap?.downStockCount ?? "–"}
+          </span>
+          {snap?.board30dStrength != null && (
+            <span className="ml-auto">30 日 {fmtPct(snap.board30dStrength)}</span>
+          )}
+        </div>
+      </button>
+    );
+  };
+
+  return (
+    <div className="relative mt-5">
+      <div className="dim mb-1.5 text-xs tracking-widest">選擇卡池</div>
+      <div
+        ref={stripRef}
+        aria-label="選擇卡池"
+        onScroll={onScroll}
+        onPointerDown={onPointerDown}
+        onClickCapture={onChipClickCapture}
+        className="flex select-none items-center gap-2 overflow-x-auto py-1 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
+        style={{
+          // 置中墊：50% 減小卡半寬（19rem/2＝9.5rem），讓任一張小卡都能捲到正中央
+          paddingLeft: "max(calc(50% - 9.5rem), 0px)",
+          paddingRight: "max(calc(50% - 9.5rem), 0px)",
+        }}
+      >
+        {[0, 1, 2].map((copy) => pools.map((p) => renderCard(p, copy)))}
+      </div>
+      <button
+        type="button"
+        aria-label="上一個卡池"
+        onClick={() => nudge(-1)}
+        className="absolute left-0 top-1/2 flex h-9 w-7 -translate-y-1/2 items-center justify-center rounded-l-lg bg-gradient-to-r from-[var(--panel-2)] to-transparent text-lg text-white/60 transition hover:text-white"
+      >
+        ‹
+      </button>
+      <button
+        type="button"
+        aria-label="下一個卡池"
+        onClick={() => nudge(1)}
+        className="absolute right-0 top-1/2 flex h-9 w-7 -translate-y-1/2 items-center justify-center rounded-r-lg bg-gradient-to-l from-[var(--panel-2)] to-transparent text-lg text-white/60 transition hover:text-white"
+      >
+        ›
+      </button>
+    </div>
+  );
+}
+
 // 稀有度色階圖例：C 白 / R 藍 / SR 紫 / SSR 橘
-function RarityLegend() {
-  const items: { r: Rarity; label: string }[] = [
+function RarityLegend() {  const items: { r: Rarity; label: string }[] = [
     { r: "C", label: "常規" },
     { r: "R", label: "精良" },
     { r: "SR", label: "稀有" },

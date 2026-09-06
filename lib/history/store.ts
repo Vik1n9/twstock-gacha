@@ -85,7 +85,7 @@ function getServerSnapshot(): HistoryEntry[] {
   return EMPTY;
 }
 
-/** 把一次抽卡結果寫進紀錄（最新的排最前面） */
+/** 把一次抽卡結果寫進紀錄（最新的排最前面）；boardName 為該卡主板塊（企劃書 11） */
 export function appendOutcome(outcome: DrawOutcome, drawType: DrawType): void {
   ensureInit();
   if (typeof window === "undefined") return;
@@ -96,7 +96,6 @@ export function appendOutcome(outcome: DrawOutcome, drawType: DrawType): void {
     drawnAt: now,
     poolId: outcome.poolId,
     poolName: outcome.poolName,
-    boardName: outcome.boardName,
     snapshotDate: outcome.snapshotDate,
     drawType,
   }));

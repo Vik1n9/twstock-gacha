@@ -21,6 +21,7 @@ export interface DrawCard {
   close: number;
   change1d: number | null;
   change30d: number;
+  boardName: string | null; // 該卡主板塊（企劃書 11；全市場池逐卡板塊不同）
 }
 
 export interface DrawOutcome {
@@ -69,6 +70,7 @@ export async function draw(
       rarity: snapshotStocks.rarity,
       weight: snapshotStocks.weight,
       stockName: stocks.name,
+      boardCode: stocks.boardCode,
       close: snapshotStocks.close,
       change1d: snapshotStocks.change1d,
       change30d: snapshotStocks.change30d,
@@ -83,7 +85,9 @@ export async function draw(
       ),
     );
 
-  const state = buildPoolState(rows);
+  // 全市場池固定 50/50（企劃書 9.1）；板塊池動態方向機率（9.2）
+  const fixedUpRate = pool.poolType === "market" ? 0.5 : null;
+  const state = buildPoolState(rows, fixedUpRate);
 
   const n = drawType === "ten" ? 10 : 1;
   const results: DrawResult[] = [];
@@ -114,6 +118,8 @@ export async function draw(
   const [board] = pool.relatedTagId
     ? await db.select().from(boards).where(eq(boards.tagId, pool.relatedTagId))
     : [];
+  const allBoards = await db.select().from(boards);
+  const boardNames = new Map(allBoards.map((b) => [b.tagId, b.tagName]));
 
   const cards: DrawCard[] = results.map((r) => {
     const row = byCode.get(r.stockCode)!;
@@ -126,6 +132,10 @@ export async function draw(
       close: row.close,
       change1d: row.change1d,
       change30d: row.change30d,
+      // 卡面板塊：板塊池＝該池板塊；全市場池＝個股主板塊（企劃書 11）
+      boardName: row.boardCode
+        ? (boardNames.get(row.boardCode) ?? null)
+        : (board?.tagName ?? null),
     };
   });
 

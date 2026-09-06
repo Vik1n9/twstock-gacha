@@ -12,9 +12,12 @@
   --gold: #f5c044;
 }
 
-html,
+html {
+  background: var(--bg); /* 畫布基底：html 背景延伸至 canvas */
+}
+
 body {
-  background: var(--bg);
+  /* 透明：讓主頁卡池主題背景層（fixed -z-10）可透出 */
   color: var(--ink);
   font-family:
     ui-sans-serif, system-ui, -apple-system, "Noto Sans TC", "PingFang TC",
@@ -426,5 +429,24 @@ body {
   .card-btn:hover,
   .card-btn:focus-visible {
     transform: none;
+  }
+
+  .bg-glow-in {
+    animation: none;
+  }
+}
+
+/* ─────────────────────────────────────────────
+   主頁卡池主題背景（點選卡池後淡入，規範 §7-4）
+   ───────────────────────────────────────────── */
+.bg-glow-in {
+  animation: bg-glow-in 0.8s ease-out both;
+}
+@keyframes bg-glow-in {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
   }
 }

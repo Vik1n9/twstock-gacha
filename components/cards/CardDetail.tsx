@@ -12,7 +12,6 @@ import { useLowFx } from "@/lib/hooks/useLowFx";
 
 // 放大檢視的卡片資料：抽卡結果與抽卡紀錄共用
 export interface CardDetailData extends DrawCard {
-  boardName?: string | null;
   poolName?: string | null;
   snapshotDate?: string | null;
   drawnAt?: number | null;

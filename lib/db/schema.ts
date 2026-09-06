@@ -32,14 +32,13 @@ export const pools = pgTable("pools", {
   sortOrder: integer("sort_order").notNull().default(0),
 });
 
-// alpha 簡化：股票直接帶主板塊（單一板塊），beta 再拆 StockBoardMapping 多對多
 export const stocks = pgTable(
   "stocks",
   {
     stockCode: text("stock_code").primaryKey(),
     name: text("name").notNull(),
     market: text("market").notNull(), // twse | tpex
-    boardCode: text("board_code").references(() => boards.tagId),
+    boardCode: text("board_code").references(() => boards.tagId), // 主板塊（顯示用；池成員以 stock_boards 為準）
     listedDate: text("listed_date"), // YYYY-MM-DD
     active: boolean("active").notNull().default(true),
     updatedAt: timestamp("updated_at", { withTimezone: true })
@@ -47,6 +46,28 @@ export const stocks = pgTable(
       .defaultNow(),
   },
   (t) => [index("stocks_board_idx").on(t.boardCode, t.active)],
+);
+
+// 企劃書 16.2 StockBoardMapping：股票 ↔ 板塊多對多（主板塊 + 副板塊/策展標籤）
+// 卡池成員資格的唯一真相來源；一檔股票可同時進多個板塊池（如台積電＝SEMI＋AI）
+export const stockBoards = pgTable(
+  "stock_boards",
+  {
+    stockCode: text("stock_code")
+      .notNull()
+      .references(() => stocks.stockCode),
+    tagId: text("tag_id")
+      .notNull()
+      .references(() => boards.tagId),
+    isPrimary: boolean("is_primary").notNull().default(true),
+    updatedAt: timestamp("updated_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+  },
+  (t) => [
+    uniqueIndex("stock_boards_pk").on(t.stockCode, t.tagId),
+    index("stock_boards_tag_idx").on(t.tagId),
+  ],
 );
 
 export const stockPrices = pgTable(
@@ -141,6 +162,7 @@ export const configs = pgTable("configs", {
 export type Board = typeof boards.$inferSelect;
 export type Pool = typeof pools.$inferSelect;
 export type Stock = typeof stocks.$inferSelect;
+export type StockBoard = typeof stockBoards.$inferSelect;
 export type StockPrice = typeof stockPrices.$inferSelect;
 export type PoolSnapshot = typeof poolSnapshots.$inferSelect;
 export type SnapshotStock = typeof snapshotStocks.$inferSelect;

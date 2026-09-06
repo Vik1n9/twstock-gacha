@@ -76,6 +76,60 @@ describe("drawOnce 方向機率（企劃書 9.2）", () => {
   });
 });
 
+describe("drawOnce 全市場池固定方向機率（企劃書 9.1）", () => {
+  it("fixedUpRate=0.5：池內分布 90/10 時方向仍為 50/50", () => {
+    const rows = [
+      ...Array.from({ length: 90 }, (_, i) => ({
+        stockCode: `U${i}`,
+        direction: "UP",
+        rarity: "C",
+        weight: 1,
+      })),
+      ...Array.from({ length: 10 }, (_, i) => ({
+        stockCode: `D${i}`,
+        direction: "DOWN",
+        rarity: "C",
+        weight: 1,
+      })),
+    ];
+    const p = buildPoolState(rows, 0.5);
+    const n = 50000;
+    let up = 0;
+    const rng = mulberry32(2024);
+    for (let i = 0; i < n; i++) {
+      const r = drawOnce(p, rng);
+      if (r?.direction === "UP") up++;
+    }
+    expect(Math.abs(up / n - 0.5)).toBeLessThan(0.005);
+  });
+
+  it("板塊池（fixedUpRate=null）不受影響：仍依池內分布", () => {
+    const rows = [
+      ...Array.from({ length: 90 }, (_, i) => ({
+        stockCode: `U${i}`,
+        direction: "UP",
+        rarity: "C",
+        weight: 1,
+      })),
+      ...Array.from({ length: 10 }, (_, i) => ({
+        stockCode: `D${i}`,
+        direction: "DOWN",
+        rarity: "C",
+        weight: 1,
+      })),
+    ];
+    const p = buildPoolState(rows);
+    const n = 50000;
+    let up = 0;
+    const rng = mulberry32(2024);
+    for (let i = 0; i < n; i++) {
+      const r = drawOnce(p, rng);
+      if (r?.direction === "UP") up++;
+    }
+    expect(up / n).toBeGreaterThan(0.89);
+  });
+});
+
 describe("drawOnce 稀有度機率（企劃書 9.4）", () => {
   it("桶齊全時：方向內 80/15/4/1", () => {
     const p = pool(
@@ -142,6 +196,7 @@ describe("drawOnce 稀有度機率（企劃書 9.4）", () => {
     const p: PoolState = {
       upStockCount: 0,
       downStockCount: 0,
+      fixedUpRate: null,
       buckets: new Map(),
     };
     expect(drawOnce(p)).toBeNull();

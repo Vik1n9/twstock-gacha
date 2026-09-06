@@ -39,6 +39,7 @@ export interface DrawCard {
   close: number;
   change1d: number | null;
   change30d: number;
+  boardName: string | null; // 該卡主板塊（板塊池＝池板塊；全市場池＝個股主板塊）
 }
 
 export interface DrawOutcome {

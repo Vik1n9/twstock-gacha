@@ -16,6 +16,8 @@ export interface PoolBucket {
 export interface PoolState {
   upStockCount: number;
   downStockCount: number;
+  // 全市場池固定 50/50（企劃書 9.1）；板塊池 null＝依池內實際分布動態計算（9.2）
+  fixedUpRate: number | null;
   buckets: Map<string, PoolBucket[]>; // key: `${direction}:${rarity}`
 }
 
@@ -32,6 +34,7 @@ function bucketKey(direction: Direction, rarity: Rarity): string {
 
 export function buildPoolState(
   rows: { stockCode: string; direction: string; rarity: string; weight: number }[],
+  fixedUpRate: number | null = null,
 ): PoolState {
   const up = rows.filter((r) => r.direction === "UP").length;
   const down = rows.length - up;
@@ -42,13 +45,14 @@ export function buildPoolState(
     if (list) list.push({ stockCode: r.stockCode, weight: r.weight });
     else buckets.set(key, [{ stockCode: r.stockCode, weight: r.weight }]);
   }
-  return { upStockCount: up, downStockCount: down, buckets };
+  return { upStockCount: up, downStockCount: down, fixedUpRate, buckets };
 }
 
 function rollDirection(pool: PoolState, rng: () => number): Direction | null {
   const total = pool.upStockCount + pool.downStockCount;
   if (total <= 0) return null; // 企劃書 10.3：方向空池為資料異常
-  const upRate = pool.upStockCount / total; // 企劃書 9.2 動態方向機率
+  const upRate =
+    pool.fixedUpRate ?? pool.upStockCount / total; // 企劃書 9.1/9.2
   return rng() < upRate ? "UP" : "DOWN";
 }
 

@@ -14,7 +14,7 @@ export default async function OddsPage() {
       <section className="panel p-6">
         <h2 className="mb-3 font-bold">方向機率</h2>
         <ul className="list-disc space-y-2 pl-5 text-sm leading-relaxed">
-          <li>全市場卡池之上漲與下跌方向機率各為 50%（alpha 尚未開放全市場池）。</li>
+          <li>全市場卡池之上漲與下跌方向機率各為 50%（企劃書 9.1，固定值）。</li>
           <li>
             板塊卡池之上漲與下跌方向機率，依當日該板塊內可抽股票之實際漲跌分布計算：
             <code className="mx-1 rounded bg-[var(--panel-2)] px-1.5 py-0.5 font-mono text-xs">
@@ -55,21 +55,24 @@ export default async function OddsPage() {
       </section>
 
       <section className="panel p-6">
-        <h2 className="mb-3 font-bold">板塊池開放門檻</h2>
+        <h2 className="mb-3 font-bold">卡池開放政策</h2>
         <ul className="list-disc space-y-1.5 pl-5 text-sm">
-          <li>最少可抽股票數：30 檔</li>
-          <li>上漲方向股票數：至少 1 檔；下跌方向股票數：至少 1 檔（單方向池暫不開放）</li>
-          <li>需有最近完整交易日收盤價，且可計算過去 30 個交易日漲跌幅</li>
-          <li>未達門檻之板塊池當日隱藏，顯示「今日未開放」或「資料不足」</li>
+          <li>所有卡池常態開放，無活動週期鎖池設計</li>
+          <li>
+            單方向池照常開放（企劃書 5.4 方案 B）：若某池當日全為上漲或全為下跌，
+            該池方向機率即為該方向 100%，並於上方「當日各卡池分布」揭露
+          </li>
+          <li>需有最近完整交易日收盤價，且可計算過去 30 個交易日漲跌幅方可入池</li>
+          <li>板塊卡池範圍：上市普通股依 TWSE 產業別映射至板塊；AI 池為人工策展主題池，股票可同時屬於多個卡池</li>
         </ul>
       </section>
 
       <section className="panel p-6">
-        <h2 className="mb-3 font-bold">當日各板塊池分布</h2>
+        <h2 className="mb-3 font-bold">當日各卡池分布</h2>
         <table className="w-full text-sm">
           <thead>
             <tr className="dim text-left text-xs">
-              <th className="py-1">板塊池</th>
+              <th className="py-1">卡池</th>
               <th className="py-1">資料日</th>
               <th className="py-1 text-right">可抽</th>
               <th className="py-1 text-right">漲/跌</th>

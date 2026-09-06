@@ -4,8 +4,10 @@ import {
   poolSnapshots,
   pools,
   snapshotStocks,
+  stockBoards,
   stocks,
   stockPrices,
+  type Pool,
 } from "../db/schema";
 import {
   computeStockMetrics,
@@ -26,6 +28,31 @@ export interface GenerateSummary {
   reason: string | null;
 }
 
+// 池成員查詢：板塊池＝stock_boards 映射（企劃書 16.2，跨池為常態）；
+// 全市場池＝所有活躍上市普通股（企劃書 2.1）
+async function getPoolStockCodes(pool: Pool): Promise<string[]> {
+  if (pool.poolType === "market") {
+    const rows = await db
+      .select({ c: stocks.stockCode })
+      .from(stocks)
+      .where(eq(stocks.active, true));
+    return rows.map((r) => r.c);
+  }
+  if (!pool.relatedTagId) return [];
+  const rows = await db
+    .select({ c: stocks.stockCode })
+    .from(stocks)
+    .innerJoin(
+      stockBoards,
+      and(
+        eq(stockBoards.stockCode, stocks.stockCode),
+        eq(stockBoards.tagId, pool.relatedTagId),
+      ),
+    )
+    .where(eq(stocks.active, true));
+  return [...new Set(rows.map((r) => r.c))];
+}
+
 // 企劃書 5.1 每日快照生成流程（步驟 5–6）
 // 冪等：同日期重跑會先刪除舊快照再寫入
 export async function generatePoolSnapshots(
@@ -34,23 +61,14 @@ export async function generatePoolSnapshots(
   const activePools = await db
     .select()
     .from(pools)
-    .where(and(eq(pools.active, true), eq(pools.poolType, "board")));
+    .where(
+      and(eq(pools.active, true), inArray(pools.poolType, ["board", "market"])),
+    );
 
   const summaries: GenerateSummary[] = [];
 
   for (const pool of activePools) {
-    if (!pool.relatedTagId) continue;
-
-    const poolStocks = await db
-      .select({ stockCode: stocks.stockCode })
-      .from(stocks)
-      .where(
-        and(
-          eq(stocks.active, true),
-          eq(stocks.boardCode, pool.relatedTagId),
-        ),
-      );
-    const codes = poolStocks.map((s) => s.stockCode);
+    const codes = await getPoolStockCodes(pool);
     if (codes.length === 0) {
       summaries.push({
         poolId: pool.poolId,
@@ -67,7 +85,7 @@ export async function generatePoolSnapshots(
     }
 
     // 該池股票全部歷史（date <= snapshotDate），JS 端分組取視窗
-    // alpha 資料量：96 檔 × ~45 日 ≈ 4300 列，單查詢即可
+    // beta 資料量：全市場池 ~1100 檔 × ~45 日 ≈ 50k 列，單查詢仍可承受
     const rows = await db
       .select({
         stockCode: stockPrices.stockCode,
@@ -97,7 +115,7 @@ export async function generatePoolSnapshots(
       if (m) metrics.push({ stockCode: code, ...m });
     }
 
-    const gate = gatePool(metrics, pool.minStockCount);
+    const gate = gatePool(metrics);
 
     // 冪等寫入：交易內刪舊插新
     await db.transaction(async (tx) => {

@@ -44,11 +44,10 @@ export interface PoolGateResult {
   board30dStrength: number | null;
 }
 
-// 企劃書 5.3 開放門檻：最低股票數、漲跌各至少 1 檔（單方向池方案 A 不開放）
-export function gatePool(
-  metrics: StockMetrics[],
-  minStockCount: number,
-): PoolGateResult {
+// 快照統計（企劃書 5.1 步驟 6）
+// 開放政策：所有卡池常態開放、無活動週期鎖定；單方向池開放（企劃書 5.4 方案B），
+// 方向機率即反映實際分布（全漲＝100% 上漲）。isOpen 恆 true，reason 恆 null。
+export function gatePool(metrics: StockMetrics[]): PoolGateResult {
   const stockCount = metrics.length;
   const upStockCount = metrics.filter((m) => m.direction === "UP").length;
   const downStockCount = stockCount - upStockCount;
@@ -58,19 +57,9 @@ export function gatePool(
   );
   const board30dStrength = median(metrics.map((m) => m.change30d));
 
-  let isOpen = true;
-  let reason: string | null = null;
-  if (stockCount < minStockCount) {
-    isOpen = false;
-    reason = `可抽股票數不足（${stockCount}/${minStockCount}）`;
-  } else if (upStockCount === 0 || downStockCount === 0) {
-    isOpen = false;
-    reason = "單方向池未開放（方案A）";
-  }
-
   return {
-    isOpen,
-    reason,
+    isOpen: true,
+    reason: null,
     stockCount,
     upStockCount,
     downStockCount,

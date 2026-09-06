@@ -33,7 +33,7 @@ describe("computeStockMetrics", () => {
   });
 });
 
-describe("gatePool（企劃書 5.3 門檻）", () => {
+describe("gatePool（常態開放，無鎖池設計）", () => {
   const mk = (n: number, dir: "UP" | "DOWN") =>
     Array.from({ length: n }, () => ({
       direction: dir,
@@ -43,23 +43,18 @@ describe("gatePool（企劃書 5.3 門檻）", () => {
       close: 100,
     }));
 
-  it("足量且有漲有跌：開放", () => {
-    const r = gatePool([...mk(20, "UP"), ...mk(15, "DOWN")], 30);
+  it("有漲有跌：開放，統計正確", () => {
+    const r = gatePool([...mk(20, "UP"), ...mk(15, "DOWN")]);
     expect(r.isOpen).toBe(true);
     expect(r.reason).toBeNull();
     expect(r.upStockCount).toBe(20);
     expect(r.downStockCount).toBe(15);
   });
 
-  it("數量不足：隱藏並記原因", () => {
-    const r = gatePool(mk(29, "UP"), 30);
-    expect(r.isOpen).toBe(false);
-    expect(r.reason).toContain("不足");
-  });
-
-  it("單方向（全上漲）：方案A 不開放", () => {
-    const r = gatePool(mk(50, "UP"), 30);
-    expect(r.isOpen).toBe(false);
-    expect(r.reason).toContain("單方向");
+  it("單方向（全上漲）：仍開放（企劃書 5.4 方案B）", () => {
+    const r = gatePool(mk(50, "UP"));
+    expect(r.isOpen).toBe(true);
+    expect(r.upStockCount).toBe(50);
+    expect(r.downStockCount).toBe(0);
   });
 });

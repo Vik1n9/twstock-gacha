@@ -1,7 +1,7 @@
 import "server-only";
 import { db } from "@/lib/db/client";
 import { boards, poolSnapshots, pools, snapshotStocks } from "@/lib/db/schema";
-import { BOARD_MAP } from "@/lib/sectors/defs";
+import { BOARD_MAP, MARKET_POOL } from "@/lib/sectors/defs";
 import type { PoolInfo } from "@/lib/api/types";
 import { and, desc, eq, sql } from "drizzle-orm";
 
@@ -26,6 +26,22 @@ export async function getActivePools(): Promise<PoolInfo[]> {
       const [board] = pool.relatedTagId
         ? await db.select().from(boards).where(eq(boards.tagId, pool.relatedTagId))
         : [];
+      // 全市場池無板塊定義 → 合成 board 物件（企劃書 2.1）
+      const boardInfo: PoolInfo["board"] = board
+        ? {
+            tagId: board.tagId,
+            tagName: board.tagName,
+            description: board.description,
+            theme: BOARD_MAP[board.tagId]?.theme ?? null,
+          }
+        : pool.poolType === "market"
+          ? {
+              tagId: MARKET_POOL.poolCode,
+              tagName: "全市場",
+              description: MARKET_POOL.description,
+              theme: MARKET_POOL.theme,
+            }
+          : null;
 
       const rarityRows = await db
         .select({
@@ -60,14 +76,7 @@ export async function getActivePools(): Promise<PoolInfo[]> {
         poolCode: pool.poolCode,
         poolName: pool.poolName,
         poolType: pool.poolType,
-        board: board
-          ? {
-              tagId: board.tagId,
-              tagName: board.tagName,
-              description: board.description,
-              theme: BOARD_MAP[board.tagId]?.theme ?? null,
-            }
-          : null,
+        board: boardInfo,
         snapshot: snapshot
           ? {
               snapshotDate: snapshot.snapshotDate,

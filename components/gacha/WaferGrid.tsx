@@ -167,7 +167,7 @@ export function WaferGrid({
               <FlipCard
                 card={card}
                 theme={theme}
-                boardName={boardName}
+                boardName={card.boardName ?? boardName}
                 size={92}
                 delay={low ? 0 : schedule.delays[i]}
                 low={low}
