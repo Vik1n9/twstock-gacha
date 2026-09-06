@@ -16,6 +16,7 @@
     "seed:dry": "tsx scripts/seed.ts --dry-run",
     "migrate:dump": "tsx scripts/migrate-to-d1.ts",
     "backfill": "tsx scripts/backfill.ts --days 60",
+    "recompute": "tsx scripts/recompute.ts",
     "snapshot": "tsx scripts/snapshot.ts",
     "test": "vitest run",
     "deploy": "vinext-cloudflare deploy --config dist/server/wrangler.json",
