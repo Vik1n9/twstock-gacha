@@ -111,6 +111,9 @@ export function GachaStage({ pools }: { pools: PoolInfo[] }) {
   const stageRef = useRef<HTMLDivElement>(null);
   const fxRef = useRef<RevealFxHandle>(null);
   const skipRef = useRef(false);
+  // skipRef 是給 async 的 start() 讀的，不觸發 render；畫面要跟著跳過收手，
+  // 因此另外用 state 記一份（preroll 期間按跳過時，PreRoll 必須立刻卸載）
+  const [skipped, setSkipped] = useState(false);
   // 這一輪抽卡的序號：關閉演出會遞增，讓還在等待的 start() 知道自己已作廢
   const runRef = useRef(0);
   const prerollDoneRef = useRef<(() => void) | null>(null);
@@ -160,6 +163,7 @@ export function GachaStage({ pools }: { pools: PoolInfo[] }) {
       setPhase("preroll");
       setBoost(0.18);
       skipRef.current = false;
+      setSkipped(false);
       fxRef.current?.clear();
 
       const pending = fetchDraw(pool.poolId, type).then((r) => {
@@ -215,6 +219,8 @@ export function GachaStage({ pools }: { pools: PoolInfo[] }) {
     runRef.current += 1;
     prerollDoneRef.current?.();
     prerollDoneRef.current = null;
+    skipRef.current = false;
+    setSkipped(false);
     setPhase("idle");
     setOutcome(null);
     setDetail(null);
@@ -225,13 +231,21 @@ export function GachaStage({ pools }: { pools: PoolInfo[] }) {
 
   const skip = () => {
     skipRef.current = true;
+    setSkipped(true);
     fxRef.current?.clear();
+    setBoost(0.12);
+    // preroll 期間按跳過：start() 正卡在 prerollDone 上等前置演出自己跑完
+    // （最長到 GATE_MAX_WAIT_MS／PREROLL_MAX_MS）。這裡要跟 close() 一樣立刻放行，
+    // 否則按鈕按下去只翻了一個 ref，畫面要再等好幾秒才動。
+    prerollDoneRef.current?.();
+    prerollDoneRef.current = null;
     if (outcome) {
       // 跳過演出＝不會有卡背轉向，跳變卡的假預告色要在這裡收回真結果色
       setHint(topRarity(outcome.cards));
       setPhase("summary");
-      setBoost(0.12);
     }
+    // outcome 還沒回來時停在 preroll，但 PreRoll 已卸載（見 skipped），
+    // 只留等待提示；結果一到 start() 就會直接切 summary。
   };
 
   if (phase === "idle") {
@@ -380,7 +394,7 @@ export function GachaStage({ pools }: { pools: PoolInfo[] }) {
           關閉 ✕
         </button>
 
-        {phase !== "summary" && (
+        {phase !== "summary" && !skipped && (
           <button
             type="button"
             onClick={skip}
@@ -402,7 +416,16 @@ export function GachaStage({ pools }: { pools: PoolInfo[] }) {
         </div>
 
         <div className="relative z-10 flex h-full items-center justify-center p-4">
-          {phase === "preroll" && (
+          {phase === "preroll" && skipped && (
+            <div
+              className="animate-pulse text-sm tracking-[0.3em]"
+              style={{ color: theme.accent }}
+            >
+              結算中…
+            </div>
+          )}
+
+          {phase === "preroll" && !skipped && (
             <PreRoll
               theme={theme}
               boardName={boardName}
