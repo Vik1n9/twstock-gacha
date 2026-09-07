@@ -34,6 +34,40 @@ export function computeStockMetrics(
   return { direction, rarity, change30d, change1d, close: latest };
 }
 
+// 卡片變動標記：稀有度升降與方向翻轉各自獨立計日。
+// 逐日沿用而非回頭重算——狀態相同就繼承前一個快照日的值，不同才寫入今天。
+// 前值為 null 代表「不知道何時開始」（這一檔在有這個欄位之前就已是這個狀態），
+// 顯示端會略過該段文字。
+export interface ChangeMarks {
+  prevRarity: Rarity | null;
+  rarityChangedOn: string | null;
+  directionChangedOn: string | null;
+}
+
+export interface PrevMarkRow extends ChangeMarks {
+  direction: Direction;
+  rarity: Rarity;
+}
+
+export function resolveChangeMarks(
+  prev: PrevMarkRow | undefined,
+  current: { direction: Direction; rarity: Rarity },
+  snapshotDate: string,
+): ChangeMarks {
+  if (!prev) {
+    return { prevRarity: null, rarityChangedOn: null, directionChangedOn: null };
+  }
+  const rarityChanged = prev.rarity !== current.rarity;
+  const directionChanged = prev.direction !== current.direction;
+  return {
+    prevRarity: rarityChanged ? prev.rarity : prev.prevRarity,
+    rarityChangedOn: rarityChanged ? snapshotDate : prev.rarityChangedOn,
+    directionChangedOn: directionChanged
+      ? snapshotDate
+      : prev.directionChangedOn,
+  };
+}
+
 export interface PoolGateResult {
   isOpen: boolean;
   reason: string | null;

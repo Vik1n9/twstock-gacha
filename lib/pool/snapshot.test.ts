@@ -1,5 +1,10 @@
 import { describe, expect, it } from "vitest";
-import { computeStockMetrics, gatePool } from "./snapshot";
+import {
+  computeStockMetrics,
+  gatePool,
+  resolveChangeMarks,
+  type PrevMarkRow,
+} from "./snapshot";
 
 describe("computeStockMetrics", () => {
   it("31 列視窗：change30d 與 change1d 正確", () => {
@@ -56,5 +61,113 @@ describe("gatePool（常態開放，無鎖池設計）", () => {
     expect(r.isOpen).toBe(true);
     expect(r.upStockCount).toBe(50);
     expect(r.downStockCount).toBe(0);
+  });
+});
+
+describe("resolveChangeMarks（變動標記逐日沿用）", () => {
+  const prev = (
+    o: Partial<PrevMarkRow> & { direction: "UP" | "DOWN"; rarity: "C" | "R" | "SR" | "SSR" },
+  ): PrevMarkRow => ({
+    prevRarity: null,
+    rarityChangedOn: null,
+    directionChangedOn: null,
+    ...o,
+  });
+
+  it("沒有前一個快照日：三欄皆 null", () => {
+    expect(
+      resolveChangeMarks(undefined, { direction: "UP", rarity: "R" }, "2026-09-07"),
+    ).toEqual({
+      prevRarity: null,
+      rarityChangedOn: null,
+      directionChangedOn: null,
+    });
+  });
+
+  it("稀有度改變：記下前一階與今天", () => {
+    const r = resolveChangeMarks(
+      prev({ direction: "DOWN", rarity: "R" }),
+      { direction: "DOWN", rarity: "C" },
+      "2026-09-07",
+    );
+    expect(r.prevRarity).toBe("R");
+    expect(r.rarityChangedOn).toBe("2026-09-07");
+  });
+
+  it("稀有度不變且前值為 null：仍是 null（不知道何時開始）", () => {
+    const r = resolveChangeMarks(
+      prev({ direction: "UP", rarity: "C" }),
+      { direction: "UP", rarity: "C" },
+      "2026-09-07",
+    );
+    expect(r.prevRarity).toBeNull();
+    expect(r.rarityChangedOn).toBeNull();
+  });
+
+  it("稀有度不變且前值有紀錄：整組繼承，不被今天蓋掉", () => {
+    const r = resolveChangeMarks(
+      prev({
+        direction: "UP",
+        rarity: "SR",
+        prevRarity: "R",
+        rarityChangedOn: "2026-09-04",
+      }),
+      { direction: "UP", rarity: "SR" },
+      "2026-09-07",
+    );
+    expect(r.prevRarity).toBe("R");
+    expect(r.rarityChangedOn).toBe("2026-09-04");
+  });
+
+  it("方向翻轉：記下今天", () => {
+    const r = resolveChangeMarks(
+      prev({ direction: "UP", rarity: "C" }),
+      { direction: "DOWN", rarity: "C" },
+      "2026-09-07",
+    );
+    expect(r.directionChangedOn).toBe("2026-09-07");
+  });
+
+  it("方向不變：繼承舊日期", () => {
+    const r = resolveChangeMarks(
+      prev({ direction: "DOWN", rarity: "C", directionChangedOn: "2026-08-20" }),
+      { direction: "DOWN", rarity: "C" },
+      "2026-09-07",
+    );
+    expect(r.directionChangedOn).toBe("2026-08-20");
+  });
+
+  it("稀有度變、方向沒變：只動稀有度那組", () => {
+    const r = resolveChangeMarks(
+      prev({
+        direction: "UP",
+        rarity: "R",
+        prevRarity: "C",
+        rarityChangedOn: "2026-08-28",
+        directionChangedOn: "2026-08-20",
+      }),
+      { direction: "UP", rarity: "SR" },
+      "2026-09-07",
+    );
+    expect(r.prevRarity).toBe("R");
+    expect(r.rarityChangedOn).toBe("2026-09-07");
+    expect(r.directionChangedOn).toBe("2026-08-20");
+  });
+
+  it("方向變、稀有度沒變：只動方向那組", () => {
+    const r = resolveChangeMarks(
+      prev({
+        direction: "UP",
+        rarity: "C",
+        prevRarity: "R",
+        rarityChangedOn: "2026-08-28",
+        directionChangedOn: "2026-08-20",
+      }),
+      { direction: "DOWN", rarity: "C" },
+      "2026-09-07",
+    );
+    expect(r.prevRarity).toBe("R");
+    expect(r.rarityChangedOn).toBe("2026-08-28");
+    expect(r.directionChangedOn).toBe("2026-09-07");
   });
 });
