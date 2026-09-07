@@ -368,7 +368,7 @@ export function directionChangeMark(
 - [ ] **Step 4: 跑測試確認通過**
 
 Run: `rtk npx vitest run lib/cards/marks.test.ts`
-Expected: PASS，12 個測試
+Expected: PASS，11 個測試
 
 - [ ] **Step 5: Commit**
 
