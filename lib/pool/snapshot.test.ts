@@ -6,25 +6,66 @@ import {
   type PrevMarkRow,
 } from "./snapshot";
 
-describe("computeStockMetrics", () => {
-  it("31 列視窗：change30d 與 change1d 正確", () => {
-    // closes[0]=110, closes[1]=100, closes[30]=100
-    const closes = [110, 100, ...Array(29).fill(100)];
-    const m = computeStockMetrics(closes);
+// 由快照日往回逐日產生測試用序列（含假日空缺時請直接寫 rows）
+const seq = (from: string, closes: number[]) =>
+  closes.map((close, i) => {
+    const d = new Date(`${from}T00:00:00Z`);
+    d.setUTCDate(d.getUTCDate() - i);
+    return { date: d.toISOString().slice(0, 10), close };
+  });
+
+describe("computeStockMetrics（30 個日曆日視窗）", () => {
+  it("基準取 30 個日曆日前那天的收盤", () => {
+    // 2026-09-07 往回 30 個日曆日＝2026-08-08
+    const rows = [
+      { date: "2026-09-07", close: 110 },
+      { date: "2026-09-04", close: 100 },
+      { date: "2026-08-08", close: 100 },
+      { date: "2026-08-07", close: 55 }, // 更早的價格不該被選中
+    ];
+    const m = computeStockMetrics(rows);
     expect(m).not.toBeNull();
-    expect(m!.change30d).toBeCloseTo(10, 6); // +10%
-    expect(m!.change1d).toBeCloseTo(10, 6);
+    expect(m!.change30d).toBeCloseTo(10, 6);
+    expect(m!.change1d).toBeCloseTo(10, 6); // 對前一個交易日，仍是交易日基準
     expect(m!.direction).toBe("UP");
     expect(m!.rarity).toBe("R");
+    expect(m!.close).toBe(110);
   });
 
-  it("視窗不足 31 列回 null（企劃書 5.2 條件4）", () => {
-    expect(computeStockMetrics([100, 99, 98])).toBeNull();
-    expect(computeStockMetrics(Array(30).fill(100))).toBeNull();
+  it("第 30 個日曆日逢假日：往前取最近一個有收盤的交易日", () => {
+    // 2026-08-08 是週六，沒有收盤 → 應退到 2026-08-07
+    const rows = [
+      { date: "2026-09-07", close: 120 },
+      { date: "2026-09-04", close: 118 },
+      { date: "2026-08-07", close: 100 },
+      { date: "2026-08-06", close: 50 },
+    ];
+    const m = computeStockMetrics(rows);
+    expect(m!.change30d).toBeCloseTo(20, 6);
+    expect(m!.rarity).toBe("SR");
   });
 
-  it("僅 31 列也可計算", () => {
-    expect(computeStockMetrics(Array(31).fill(100))).toEqual({
+  it("30 個日曆日前沒有任何收盤（新上市）回 null", () => {
+    // 最早只到 2026-08-20，跨不過 2026-08-08 的界線
+    const rows = [
+      { date: "2026-09-07", close: 100 },
+      { date: "2026-08-20", close: 90 },
+    ];
+    expect(computeStockMetrics(rows)).toBeNull();
+  });
+
+  it("空序列回 null", () => {
+    expect(computeStockMetrics([])).toBeNull();
+  });
+
+  it("交易日數量少但跨得過 30 日曆日，仍可計算", () => {
+    // 只有 3 列，但最舊那列早於界線 → 足夠
+    const rows = [
+      { date: "2026-09-07", close: 100 },
+      { date: "2026-09-04", close: 100 },
+      { date: "2026-07-31", close: 100 },
+    ];
+    expect(computeStockMetrics(rows)).toEqual({
       direction: "UP",
       rarity: "C",
       change30d: 0,
@@ -33,8 +74,38 @@ describe("computeStockMetrics", () => {
     });
   });
 
+  it("下跌取絕對值分級，方向為 DOWN", () => {
+    const rows = [
+      { date: "2026-09-07", close: 80 },
+      { date: "2026-09-04", close: 82 },
+      { date: "2026-08-08", close: 100 },
+    ];
+    const m = computeStockMetrics(rows);
+    expect(m!.change30d).toBeCloseTo(-20, 6);
+    expect(m!.direction).toBe("DOWN");
+    expect(m!.rarity).toBe("SR");
+  });
+
   it("收盤價無效回 null", () => {
-    expect(computeStockMetrics([0, ...Array(31).fill(100)])).toBeNull();
+    expect(
+      computeStockMetrics([
+        { date: "2026-09-07", close: 0 },
+        { date: "2026-08-08", close: 100 },
+      ]),
+    ).toBeNull();
+    expect(
+      computeStockMetrics([
+        { date: "2026-09-07", close: 100 },
+        { date: "2026-08-08", close: 0 },
+      ]),
+    ).toBeNull();
+  });
+
+  it("連續交易日序列：基準落在第 30 個日曆日", () => {
+    const rows = seq("2026-09-07", [130, ...Array(40).fill(100)]);
+    const m = computeStockMetrics(rows);
+    expect(m!.change30d).toBeCloseTo(30, 6);
+    expect(m!.rarity).toBe("SSR");
   });
 });
 

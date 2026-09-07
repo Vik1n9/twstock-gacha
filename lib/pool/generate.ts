@@ -13,6 +13,7 @@ import {
   computeStockMetrics,
   gatePool,
   resolveChangeMarks,
+  shiftDays,
   type PrevMarkRow,
   type StockMetrics,
 } from "./snapshot";
@@ -56,17 +57,14 @@ async function getPoolStockCodes(pool: Pool): Promise<string[]> {
   return [...new Set(rows.map((r) => r.c))];
 }
 
-// 快照只需要每檔最近 31 個交易日的收盤（computeStockMetrics 用到 closes[0] 與 closes[30]）。
-// 60 個日曆日約含 40 個交易日，即使碰上農曆年連假也仍有 35 個以上，餘裕足夠。
+// 快照只需要每檔往回 30 個日曆日的收盤（computeStockMetrics 的基準日）。
+// 取 60 天是留餘裕：第 30 天逢農曆年連假時，要再往前找好幾天才有收盤價。
 // 不設下界的話，stock_prices 會隨營運天數無限成長，而整段歷史都要載進 Worker
 // 記憶體（單一 isolate 上限 128 MB），全市場池一年後就有撞牆風險。
 const PRICE_WINDOW_DAYS = 60;
 
-function windowStartDate(snapshotDate: string, days: number): string {
-  const d = new Date(`${snapshotDate}T00:00:00Z`);
-  d.setUTCDate(d.getUTCDate() - days);
-  return d.toISOString().slice(0, 10);
-}
+const windowStartDate = (snapshotDate: string, days: number) =>
+  shiftDays(snapshotDate, -days);
 
 // 企劃書 5.1 每日快照生成流程（步驟 5–6）
 // 冪等：同日期重跑會覆蓋既有快照（見下方寫入順序說明）
@@ -194,7 +192,7 @@ export async function generatePoolSnapshots(
     for (const [code, closes] of byStock) {
       if (!poolCodes.has(code)) continue;
       if (closes[0].date !== snapshotDate) continue; // 企劃書 5.2 條件3：快照日須有收盤
-      const m = computeStockMetrics(closes.map((c) => c.close));
+      const m = computeStockMetrics(closes);
       if (m) metrics.push({ stockCode: code, ...m });
     }
 
