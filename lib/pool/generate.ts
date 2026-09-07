@@ -12,9 +12,11 @@ import {
 import {
   computeStockMetrics,
   gatePool,
+  resolveChangeMarks,
+  type PrevMarkRow,
   type StockMetrics,
 } from "./snapshot";
-import { and, eq, gte, lte, desc, inArray } from "drizzle-orm";
+import { and, eq, gte, lt, lte, desc, inArray } from "drizzle-orm";
 
 export interface GenerateSummary {
   poolId: string;
@@ -79,6 +81,49 @@ export async function generatePoolSnapshots(
     .where(
       and(eq(pools.active, true), inArray(pools.poolType, ["board", "market"])),
     );
+
+  // 前一個快照日的變動標記。稀有度與方向都只由 change30d 決定、與卡池無關，
+  // 因此以 stock_code 取一次，17 個池共用同一組值——每池各算的話，個股新進
+  // 某池時會在該池顯示不同的變動日。
+  // 「上一個快照日」取 pool_snapshots 中小於今日的最大日期，不是前一個日曆日，
+  // 連假或停市才不會被誤判成一次變動。
+  // 注意：上方「摘要最後寫」的崩潰安全順序是「每池」保證，不是「整天」保證。
+  // 若前一次執行在寫完部分池的摘要後就中斷，這裡仍會把那天當成有效的前一快照日，
+  // 但未跑完的池，其個股當天可能沒有 snapshot_stocks 列，會落入下面「查無前一列」
+  // 分支，把累積的變動標記重置成 null（降級成「未知」）。這只是顯示文字暫時失準，
+  // 下次真的變動時會重新記錄，不影響機率或抽卡結果，可接受。
+  const [prevSnapshot] = await db
+    .select({ date: poolSnapshots.snapshotDate })
+    .from(poolSnapshots)
+    .where(lt(poolSnapshots.snapshotDate, snapshotDate))
+    .orderBy(desc(poolSnapshots.snapshotDate))
+    .limit(1);
+
+  const prevMarks = new Map<string, PrevMarkRow>();
+  if (prevSnapshot) {
+    const prevRows = await db
+      .select({
+        stockCode: snapshotStocks.stockCode,
+        direction: snapshotStocks.direction,
+        rarity: snapshotStocks.rarity,
+        prevRarity: snapshotStocks.prevRarity,
+        rarityChangedOn: snapshotStocks.rarityChangedOn,
+        directionChangedOn: snapshotStocks.directionChangedOn,
+      })
+      .from(snapshotStocks)
+      .where(eq(snapshotStocks.snapshotDate, prevSnapshot.date));
+    for (const r of prevRows) {
+      // 同一檔會在多個池各有一列，值相同，取第一列即可
+      if (prevMarks.has(r.stockCode)) continue;
+      prevMarks.set(r.stockCode, {
+        direction: r.direction as PrevMarkRow["direction"],
+        rarity: r.rarity as PrevMarkRow["rarity"],
+        prevRarity: r.prevRarity as PrevMarkRow["prevRarity"],
+        rarityChangedOn: r.rarityChangedOn,
+        directionChangedOn: r.directionChangedOn,
+      });
+    }
+  }
 
   const summaries: GenerateSummary[] = [];
 
@@ -173,14 +218,15 @@ export async function generatePoolSnapshots(
         ),
       );
 
-    // D1 單查詢上限 100 個綁定參數：snapshot_stocks 每列 11 欄 → 每批最多 9 列
+    // D1 單查詢上限 100 個綁定參數：snapshot_stocks 每列 14 欄 → 每批最多 7 列
+    // （7 × 14 = 98）。加欄位時這個數字要一起改，否則整批 upsert 會被 D1 拒絕。
     const upserts: BatchStatements = [];
-    for (let i = 0; i < metrics.length; i += 9) {
+    for (let i = 0; i < metrics.length; i += 7) {
       upserts.push(
         db
           .insert(snapshotStocks)
           .values(
-            metrics.slice(i, i + 9).map((m) => ({
+            metrics.slice(i, i + 7).map((m) => ({
               snapshotDate,
               poolId: pool.poolId,
               stockCode: m.stockCode,
@@ -191,6 +237,11 @@ export async function generatePoolSnapshots(
               close: m.close,
               weight: 1,
               drawable: true,
+              ...resolveChangeMarks(
+                prevMarks.get(m.stockCode),
+                m,
+                snapshotDate,
+              ),
             })),
           )
           .onConflictDoUpdate({
@@ -207,6 +258,9 @@ export async function generatePoolSnapshots(
               close: sql`excluded.close`,
               weight: sql`excluded.weight`,
               drawable: sql`excluded.drawable`,
+              prevRarity: sql`excluded.prev_rarity`,
+              rarityChangedOn: sql`excluded.rarity_changed_on`,
+              directionChangedOn: sql`excluded.direction_changed_on`,
             },
           }),
       );

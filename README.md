@@ -61,6 +61,7 @@ cp .env.example .env.local     # 填入 CLOUDFLARE_ACCOUNT_ID / CLOUDFLARE_D1_DA
 npm run db:generate            # schema 異動時產生 migration SQL（drizzle-kit generate）
 npx wrangler d1 execute twstock-gacha --local --file ./drizzle/0000_init-d1.sql --yes  # 本機 D1 建表
 npx wrangler d1 execute twstock-gacha --local --file ./drizzle/0001_pool-snapshots-pool-idx.sql --yes
+npx wrangler d1 execute twstock-gacha --local --file ./drizzle/0002_snapshot-stocks-change-marks.sql --yes
 npm run seed                   # 16 板塊 + 全市場池 + 上市普通股 + 板塊映射（經 D1 HTTP API）
 npm run backfill               # 回填 60 日曆天收盤價（結束後統一算一次 change1d）
 npm run recompute              # 手動重算 change1d（校正用，可 --from / --to）
@@ -87,7 +88,7 @@ npm run deploy           # 部署到 Cloudflare Workers（含 cron trigger）
 1. 建資源：`npx wrangler d1 create twstock-gacha`、`npx wrangler kv namespace create VINEXT_KV_CACHE`，
    將 id 填入 `wrangler.jsonc`。
 2. 建表：`npx wrangler d1 execute twstock-gacha --remote --file ./drizzle/0000_init-d1.sql --yes`，
-   接著依序套用 `drizzle/` 下編號較大的 migration（目前為 `0001_pool-snapshots-pool-idx.sql`）。
+   接著依序套用 `drizzle/` 下編號較大的 migration（目前為 `0002_snapshot-stocks-change-marks.sql`）。
    schema 異動後以 `npm run db:generate` 產生新的 migration，部署前記得對 `--remote` 套用。
 3. 資料：`npm run seed` + `npm run backfill`。
 4. 密鑰：`npx wrangler secret put CRON_SECRET`。
