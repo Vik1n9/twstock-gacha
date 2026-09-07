@@ -2,55 +2,31 @@
 
 **線上版**：https://twstock-gacha.twstock-gacha.workers.dev
 
-以真實台股行情驅動的抽卡網頁遊戲。卡片稀有度由個股**近 30 個交易日漲跌幅**決定，並實作板塊卡池系統（企劃書 v1.1）。
+用真實台股行情驅動的抽卡遊戲：稀有度看個股**近 30 個交易日漲跌幅**，卡池按板塊切。
 
-**Beta 版範圍**：16 板塊池＋全市場池全數上線（上市普通股 1,084 檔）；板塊分類採「TWSE 產業別＋主題合併」（企劃書 3.1），AI 池為人工策展主題池；首頁卡池切換器；全市場池方向機率固定 50/50。精選池、還原股價為後續項目。
+> Beta：16 板塊池＋全市場池已上線（上市普通股約 1,084 檔）。精選池、還原股價還沒做。
 
-## 技術
+## 這是什麼
 
-> 執行環境為 Cloudflare Workers + D1（以 [vinext](https://github.com/cloudflare/vinext) 於 Vite 上重實作 Next.js 16 API）。
-> 遷移前的 Vercel + Neon 版本存放於 `archive/vercel-neon` 分支，僅作備份，不再維護。
-
-- Next.js 16.3 API（App Router）經 vinext + Vite 8 建置，部署 Cloudflare Workers
-- Cloudflare D1（SQLite）+ Drizzle ORM（`drizzle-orm/sqlite-core`、D1 綁定／D1 HTTP API 雙模式）
-- Cloudflare Cron Triggers（平日 10:00 UTC 快照）＋ KV cache adapter（`unstable_cache`/`revalidateTag`）
-- GSAP + Canvas 粒子引擎（板塊主題 config 驅動）
-- 資料源：TWSE MI_INDEX（全市場日收盤）、TWSE OpenAPI t187ap03_L（上市清單/產業別）
-
-## 卡池列表（beta）
-
-| 卡池 | 涵蓋（TWSE 產業別） | 檔數 |
-|---|---|---:|
-| 全市場池 | 所有上市普通股（排除 TDR），方向固定 50/50 | ~1,080 |
-| 半導體池 | 24 半導體 | 96 |
-| AI 與運算池 | 人工策展（伺服器/散熱電源/ASIC/交換器/雲端，`lib/sectors/ai-curate.ts`） | 46 |
-| 電子製造池 | 31 其他電子＋05 電機機械 | 96 |
-| 電腦與週邊池 | 25 電腦週邊＋29 電子通路 | 86 |
-| 通信網路池 | 27 通信網路 | 46 |
-| 光電光學池 | 26 光電 | 68 |
-| 電子零組件池 | 28 電子零組件＋06 電器電纜 | 120 |
-| 車電與汽車池 | 12 汽車＋11 橡膠（輪胎） | 55 |
-| 金融保險池 | 17 金融保險 | 31 |
-| 鋼鐵原物料池 | 10 鋼鐵＋01 水泥＋08 玻璃陶瓷＋09 造紙 | 50 |
-| 塑膠化學池 | 21 化學＋03 塑膠 | 49 |
-| 消費傳產池 | 02 食品＋04 紡織＋18 貿易百貨＋38 居家生活 | 95 |
-| 生技醫療池 | 22 生技醫療 | 61 |
-| 航運物流池 | 15 航運 | 28 |
-| 觀光休閒池 | 16 觀光餐旅＋37 運動休閒 | 37 |
-| 能源綠能池 | 35 綠能環保＋23 油電燃氣 | 35 |
-
-建材營造（55）、其他業（52）不屬任何板塊池，僅進全市場池。股票可跨池（如台積電＝半導體＋AI）。
-
-## 遊戲規則（摘要）
-
-| 項目 | 規則 |
+| 項目 | 規則（摘要） |
 |---|---|
-| 稀有度 | 30 日漲跌幅：0~<5% C、5~<15% R、15~<30% SR、≥30% SSR；下跌取絕對值同門檻 |
-| 方向機率 | 板塊池依當日池內實際漲跌分布動態計算；全市場池固定 50/50 |
-| 稀有度機率 | 方向內目標 C 80% / R 15% / SR 4% / SSR 1%；逐抽獨立（同張卡可重複抽出） |
-| 跳變演出 | 純展示：抽中 SR 有 1/10 以「R 蓄力→昇格 SR」演出（全體約 0.4%）、SSR 有 1/10 以「SR 蓄力→昇格 SSR」（約 0.1%）；不改機率、不入抽卡紀錄。演出編排見下方 |
-| 開放政策 | 所有卡池常態開放、無活動週期鎖池；單方向池照常開放（企劃書 5.4 方案B），方向機率即反映實際分布 |
-| 空池 | 維持原方向，稀有度逐級下降；C 仍無貨視為資料異常 |
+| 稀有度 | 30 日漲跌幅絕對值：`<5%` C、`<15%` R、`<30%` SR、`≥30%` SSR |
+| 方向 | 板塊池依當日池內漲跌分布；全市場池固定 50/50 |
+| 機率 | 方向內目標 C 80% / R 15% / SR 4% / SSR 1%；逐抽獨立 |
+| 昇格演出 | 純展示（不改機率）：SR／SSR 各有約 1/10 會先演低一階再跳變 |
+| 開放 | 全池常態開放；空池則同方向稀有度降級 |
+
+卡池一覽與產業對照見站內「卡池列表」。板塊分類採 TWSE 產業別＋主題合併；AI 池為人工策展。
+
+## 技術棧
+
+- **執行環境**：[vinext](https://github.com/cloudflare/vinext)（Vite 上的 Next.js 16 API）→ **Cloudflare Workers**
+- **資料**：Cloudflare **D1** + Drizzle；平日 cron `0 10 * * 1-5`（台北 18:00）抓收盤並產快照
+- **快取**：KV（`unstable_cache` / `revalidateTag`）
+- **前端演出**：GSAP + Canvas
+- **資料源**：TWSE MI_INDEX、TWSE OpenAPI `t187ap03_L`
+
+舊版 Vercel + Neon 僅留在 `archive/vercel-neon`，不再維護。
 
 ## 本機開發
 
@@ -96,9 +72,7 @@ npm run deploy           # 部署到 Cloudflare Workers（含 cron trigger）
    手動觸發：`curl -H "Authorization: Bearer $CRON_SECRET" https://<worker>.workers.dev/api/cron/snapshot`。
    `observability` 已開啟，cron 失敗會留在 Workers Logs（`npx wrangler tail`）。
 
-> 型別：綁定型別由 `npm run cf-typegen`（`wrangler types`）產生到 `worker-configuration.d.ts`
-> 並入版控，改動 `wrangler.jsonc` 後要重跑。`CRON_SECRET` 是 `wrangler secret put` 設的機密，
-> 不在 wrangler 設定內，故補宣告於 `types/env.d.ts`。
+> Workers Builds 若接 Git：Install `npm ci`、Build `npm run build`、Deploy 建議用專案的 `npm run deploy -- --skip-build`（不要只用裸的 `npx wrangler deploy`，會少掉 triggers 那段）。
 
 ## API
 
@@ -108,128 +82,18 @@ npm run deploy           # 部署到 Cloudflare Workers（含 cron trigger）
 | `POST /api/draw` | `{poolId, drawType: single\|ten}` 抽卡 |
 | `GET /api/cron/snapshot` | Bearer `CRON_SECRET`；抓收盤＋生成快照（冪等） |
 
-## 跳變（昇格）演出
-
-`components/gacha/PreRoll.tsx`。靠「先給一個看似已定案的低階結果」製造落差，分四拍：
-
-| 拍 | 長度 | 內容 |
-|---|---:|---|
-| A 假結局 | 0.62s | 能量減速停轉、低階色蓋章落定、徽章與板塊名退到背景 →「喔…只有 R」 |
-| B 異常 | 0.42~0.50s | 暗角收攏、蓋章故障龜裂、低階色兩片蓋住畫面、粒子完全停格 → 屏息 |
-| C 撕裂 | 0.5s | 畫面自中央鋸齒撕開，兩片扯離，結果色從後面炸出，結果字母砸進畫面 |
-| D 餘韻 | 0.4s | 字母站定後才引爆中央爆點，撐到爆點散開才退場 |
-
-SSR 昇格（`big`）每一段都再加碼：多屏息一拍、字母更大、多一記餘震白閃。
-
-編排上有兩個必須留意的限制：
-
-1. **爆點在更上層。** `RevealFx` 的 canvas 是 z-30，而 `PreRoll` 整棵樹在 z-10 容器內，
-   所以字母與爆點同時出現時字母會被整個蓋掉。因此字母先站定（C+0.10），爆點延到
-   C+0.38 才炸，當成它的落槌。
-2. **同色系的強光會吃掉字母。** 結果字母用白字＋稀有度色描邊＋暗底盤，並在亮相期間
-   壓低能量核心亮度（`Field.core`），否則橘字會直接融進橘色光核。
-
-卡面端（`GachaStage.impact`）對應三段式爆點：低階色爆開 → **內爆收束**（`RevealFx.implode`）
-→ 結果色正式炸開。中間那記內爆是關鍵，少了它兩發爆點只像同一個特效放兩次。
-
-前置演出**不是固定長度**：時間軸在 1.70s 有一道閘門，抽卡結果還沒回來就停在滿蓄力等待
-（上限 6s），演完才由 `onDone` 通知上層進入翻牌。沒有這道閘門的話，`/api/draw` 一慢
-（當初是 Neon 免費方案限流，現在則可能是 D1 查詢或冷啟動）稀有度預告與整段昇格演出就會被跳過。
-
-## 寫入量與 D1 配額
-
-D1 的寫入額度（[官方定價](https://developers.cloudflare.com/d1/platform/pricing/)）：
-Workers Free 每日 100,000 列、Workers Paid 每月內含 5,000 萬列。
-**超過後讀取仍正常、所有寫入失敗**——表現為頁面看得到但抽卡回 500（`draw_records` 寫不進去），
-且 drizzle 只會拋出 `Failed query: insert into ...`，真正的原因在 `Error.cause`
-（`/api/draw` 已會把它記進 Workers Logs）。因此每日流程刻意壓低寫入量：
-
-| 動作 | 寫入列數 |
-|---|---:|
-| 每日 cron：收盤入庫 | 約 1,100（該日一次） |
-| 每日 cron：重算 change1d | 約 1,100（**只算當日**） |
-| 每日 cron：快照明細 | 約 2,100 |
-| `npm run backfill --days 60` | 約 65,000（結束後只重算一次） |
-
-兩個設計上的取捨：
-
-- `change1d` **只重算當次匯入的那一天**。前一天的值在前一天就算過了，不必重算。
-  （先前是無界的全表 UPDATE 且每匯入一天跑一次：每日 cron 約 64,000 列並隨歷史成長，
-  backfill 60 天約 200 萬列——這正是配額被用盡的原因。）
-- 收盤資料**該日已完整入庫就不重抓重寫**。`findLastTradingDay()` 找不到當日資料時會往回退，
-  否則每次都會把前一交易日重寫一遍。
-- 需要回頭校正歷史資料時，用 `npm run recompute -- --from ... --to ...` 明確觸發，不放進排程。
-
-## 資料載入分層
-
-前台不會在開啟網頁時就把所有資料撈進來，而是分三段：
-
-| 階段 | 觸發時機 | 載入內容 | DB 查詢數 |
-|---|---|---:|---:|
-| 1 | 開啟首頁 `/` | 卡池清單＋各池最新快照摘要（`getActivePools`） | 3 |
-| 2 | 進 `/pools`、`/odds`、`/api/pools` | 再加上各池方向×稀有度張數（`getActivePoolsWithRarity`） | 4 |
-| 3 | 按下單抽／十連 | 該池當日可抽個股明細（`POST /api/draw`） | 5～6 |
-
-卡池資料每個交易日只在 cron 快照後變動一次，故 1、2 以 `unstable_cache`
-（tag `pools`）快取；`/api/cron/snapshot` 生成新快照後會 `revalidateTag` 失效。
-
-前端 JS 同樣分階段：GSAP 與所有演出元件集中在 `components/gacha/performance.ts`，
-由 `lib/hooks/useIdlePreload.ts` 動態載入 —— 首屏不下載，瀏覽器閒置時才背景取，
-按下抽卡（或在 `/history` 點卡片）時才保證就緒。**新增演出元件時記得一併加進
-`performance.ts` 匯出**，否則它會被靜態 import 拉回首屏。
-
-| 頁面 | 首屏 route JS |
-|---|---:|
-| `/` | 51 KB（原 166 KB） |
-| `/history` | 36 KB（原 125 KB） |
-| 演出 chunk（GSAP＋特效，兩頁共用） | 85 KB，延後載入 |
-
-## 特效節流（手機發熱）
-
-演出很吃 GPU，而手機的**持續**散熱能力遠低於瞬時效能：跑分挑等級會在前 30 秒看起來
-很好、之後降頻到比保守設定還糟。`lib/fx/quality.ts` 因此把「畫多細」與「畫多快」集中
-管理，各 canvas 元件只要問 `fxProfile()` 並用 `startFrameLoop()` 取代裸的
-`requestAnimationFrame`。
-
-| 檔次 | 判定 | 解析度上限 | 粒子 | bloom／噪點 | 持續／結果頁／命中特效張數 |
-|---|---|---:|---:|---|---:|
-| `low` | 觸控且核心 ≤ 4 或記憶體 ≤ 3 GB | 1.0x | 40% | 皆關 | 30／20／60 |
-| `mid` | 其餘觸控裝置、或核心 ≤ 4 的桌機 | 1.5x | 65% | 只開 bloom | 45／24／60 |
-| `high` | 桌機且核心 > 4、記憶體 > 4 GB | 2.0x | 100% | 皆開 | 60／30／60 |
-
-命中特效（翻牌爆點、SSR 簽名）三檔一律 60：發熱來自**持續**滿載，不是一兩秒的
-尖峰，而那幾秒正是整個遊戲的情緒高點。60 仍擋掉 120Hz 螢幕的工作量翻倍，弱勢裝置
-本來就跑不到 60，天花板拉高不會讓它多花力氣。
-
-張數會被螢幕更新率**量化**——只能每 k 幀畫一次，所以 60Hz 實得 60/30/20/15，
-120Hz 實得 120/60/40/30/24/20。`mid` 的 45 在 60Hz 上實得 30、在 120Hz 上實得 40。
-調整這些數字時要一併看量化後的結果，否則會設出「看似更高、實際同格」的值
-（`lib/fx/quality.test.ts` 有針對這點的迴歸測試）。
-
-四道節流，缺一不可：
-
-1. **解析度**。手機 DPR 常是 3，過去鉗在 2 仍是 CSS 尺寸的 4 倍像素量；全螢幕特效光是
-   填色就足以讓機身發燙。
-2. **張數上限**。裸 rAF 在 90/120Hz 螢幕上直接把工作量再乘 1.5～2 倍，`startFrameLoop`
-   把它壓回目標值，並在分頁隱藏時完全停機。
-3. **結果頁降檔**（`SectorBackdrop` 的 `idle`）。結果頁是玩家停留最久的畫面，背景在那裡
-   降到 `idleFps` 並收掉 bloom 與噪點這兩個全螢幕合成步驟（淡出，不是瞬間消失）。
-4. **量到超支就降級**。`startFrameLoop` 量的是「我們自己畫了多久」，不是幀間隔；連續超
-   出六成預算就回呼，由 `SectorBackdrop` 依 bloom → 噪點 → 神光束 → 粒子 → 張數的順序
-   單向下修（不回升，避免在臨界點來回抖動）。
-
-另外兩處：bloom 的模糊改在 1/4 解析度的離屏 canvas 上做（canvas filter 成本算在目的地
-像素上，同樣視覺效果差約 16 倍工作量）；`html[data-lowfx]` 讓「特效：低」開關也能停掉
-卡面的無限 CSS 動畫——過去那個開關只影響 canvas，`prefers-reduced-motion` 才吃得到 CSS。
-
 ## 已知限制（beta）
 
-- 漲跌幅使用**原始收盤價**：個股除權息日會被視為下跌（後續可改用還原股價，FinMind `TaiwanStockPriceAdj`）。
-- 興櫃、上櫃、ETF、權證、TDR 未納入；僅上市普通股（部分知名 AI 概念股如群聯/信驊/雙鴻屬上櫃，故不在池內）。
-- 板塊共振：板塊池以「同方向」計數；全市場池卡為混合板塊，已改回企劃書 15.3「同板塊 5+/8+」規則。
-- 特效分派點（每池不同背景母題、十連排列、SSR 簽名）仍吃 SEMI 預設行為，僅主題色隨池切換。
-- TWSE 速率未公開規範，回填已節流（400ms/請求）；過度頻繁可能被暫時擋下。
-- 抽卡紀錄（`/history`）存在瀏覽器 localStorage，換裝置或清除瀏覽資料就會消失。
+- 用**原始收盤價**算漲跌；除權息日會被當成大跌
+- 只含**上市普通股**（上櫃／興櫃／ETF／權證／TDR 不在）
+- 抽卡紀錄在瀏覽器 `localStorage`，換裝置會沒
+- TWSE 回填有節流；打太兇可能被擋
+
+## 深入細節
+
+實作筆記（演出時序、D1 寫入額度、特效節流、資料載入分層）不塞進這份總覽，見：
+
+- [docs/internals.md](docs/internals.md)
 
 ## 授權
 
