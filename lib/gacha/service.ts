@@ -9,36 +9,9 @@ import {
 } from "../db/schema";
 import { buildPoolState, drawOnce, type DrawResult } from "./engine";
 import { and, desc, eq } from "drizzle-orm";
+import type { DrawCard, DrawOutcome } from "../api/types";
 
 export type DrawType = "single" | "ten";
-
-export interface DrawCard {
-  stockCode: string;
-  stockName: string;
-  direction: DrawResult["direction"];
-  rolledRarity: DrawResult["rolledRarity"];
-  rarity: DrawResult["finalRarity"];
-  close: number;
-  change1d: number | null;
-  change30d: number;
-  boardName: string | null; // 該卡主板塊（企劃書 11；全市場池逐卡板塊不同）
-  prevRarity: DrawResult["finalRarity"] | null; // 上一個不同的稀有度
-  rarityChangedOn: string | null;
-  directionChangedOn: string | null;
-  jumpFrom: "R" | "SR" | null; // 跳變演出標記（純展示，不入 drawRecords）
-}
-
-export interface DrawOutcome {
-  poolId: string;
-  poolName: string;
-  boardName: string | null;
-  snapshotDate: string;
-  stockCount: number;
-  upStockCount: number;
-  downStockCount: number;
-  board30dStrength: number | null;
-  cards: DrawCard[];
-}
 
 export type DrawError =
   | { code: "POOL_NOT_FOUND" }
@@ -144,7 +117,7 @@ export async function draw(
       boardName: row.boardCode
         ? (boardNames.get(row.boardCode) ?? null)
         : (board?.tagName ?? null),
-      prevRarity: (row.prevRarity as DrawResult["finalRarity"] | null) ?? null,
+      prevRarity: row.prevRarity as DrawResult["finalRarity"] | null,
       rarityChangedOn: row.rarityChangedOn,
       directionChangedOn: row.directionChangedOn,
       // 跳變演出標記（純展示）：SR 結果 1/10 以 R 蓄力登場、SSR 結果 1/10 以 SR 蓄力登場

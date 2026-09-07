@@ -87,6 +87,11 @@ export async function generatePoolSnapshots(
   // 某池時會在該池顯示不同的變動日。
   // 「上一個快照日」取 pool_snapshots 中小於今日的最大日期，不是前一個日曆日，
   // 連假或停市才不會被誤判成一次變動。
+  // 注意：上方「摘要最後寫」的崩潰安全順序是「每池」保證，不是「整天」保證。
+  // 若前一次執行在寫完部分池的摘要後就中斷，這裡仍會把那天當成有效的前一快照日，
+  // 但未跑完的池，其個股當天可能沒有 snapshot_stocks 列，會落入下面「查無前一列」
+  // 分支，把累積的變動標記重置成 null（降級成「未知」）。這只是顯示文字暫時失準，
+  // 下次真的變動時會重新記錄，不影響機率或抽卡結果，可接受。
   const [prevSnapshot] = await db
     .select({ date: poolSnapshots.snapshotDate })
     .from(poolSnapshots)
