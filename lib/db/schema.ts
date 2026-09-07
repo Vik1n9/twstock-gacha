@@ -133,6 +133,12 @@ export const snapshotStocks = sqliteTable(
     close: real("close").notNull(),
     weight: real("weight").notNull().default(1),
     drawable: booleanCol("drawable").notNull().default(true),
+    // 變動標記（見 lib/pool/snapshot.ts 的 resolveChangeMarks）：
+    // 由每日快照逐日沿用，不回頭重算。null＝這一檔在有這些欄位之前就已是
+    // 目前的狀態，不知道何時開始，顯示端會略過。
+    prevRarity: text("prev_rarity"), // 上一個不同的稀有度
+    rarityChangedOn: text("rarity_changed_on"), // 變成現在這個稀有度的日期
+    directionChangedOn: text("direction_changed_on"), // 方向翻成現在這個方向的日期
   },
   (t) => [
     uniqueIndex("snapshot_stocks_bk").on(
