@@ -607,7 +607,7 @@ rtk npm run build && rtk npm run start
 ```bash
 rtk npx tsx -e "
 import { readFileSync } from 'node:fs';
-const secret = readFileSync('.dev.vars','utf8').split('=')[1].trim();
+const secret = readFileSync('.dev.vars','utf8').split('=')[1].trim().replace(/^["']|["']$/g, '');
 fetch('http://localhost:8787/api/cron/snapshot', { headers: { authorization: 'Bearer ' + secret } })
   .then(r => r.text()).then(t => console.log(t.slice(0, 400)));
 "
