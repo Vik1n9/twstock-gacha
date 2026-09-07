@@ -280,7 +280,7 @@ export function CardDetail({
           </dl>
 
           <div className="dim mt-3 text-[11px] leading-relaxed" data-row>
-            稀有度由個股近 30 個交易日漲跌幅決定；方向為該股在資料日的漲跌方向
+            稀有度由個股近 30 個日曆日漲跌幅決定；方向為該股在資料日的漲跌方向
             （漲＝白卡、跌＝黑卡）。收盤價為資料日之原始收盤價，未還原除權息。
           </div>
         </div>

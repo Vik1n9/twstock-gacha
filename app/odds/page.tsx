@@ -26,7 +26,7 @@ export default async function OddsPage() {
 
       <section className="panel p-6">
         <h2 className="mb-3 font-bold">稀有度機率（方向內目標機率）</h2>
-        <p className="dim mb-3 text-sm">稀有度由個股過去 30 個交易日漲跌幅決定，不因卡池不同而改變。</p>
+        <p className="dim mb-3 text-sm">稀有度由個股過去 30 個日曆日漲跌幅決定，不因卡池不同而改變。</p>
         <table className="w-full max-w-sm text-sm">
           <thead>
             <tr className="dim text-left text-xs">
@@ -80,7 +80,7 @@ export default async function OddsPage() {
             單方向池照常開放（企劃書 5.4 方案 B）：若某池當日全為上漲或全為下跌，
             該池方向機率即為該方向 100%，並於上方「當日各卡池分布」揭露
           </li>
-          <li>需有最近完整交易日收盤價，且可計算過去 30 個交易日漲跌幅方可入池</li>
+          <li>需有最近完整交易日收盤價，且 30 個日曆日前有可用收盤價方可入池</li>
           <li>板塊卡池範圍：上市普通股依 TWSE 產業別映射至板塊；AI 池為人工策展主題池，股票可同時屬於多個卡池</li>
         </ul>
       </section>
