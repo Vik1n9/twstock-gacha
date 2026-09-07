@@ -1,35 +1,43 @@
-# 卡片詳情顯示稀有度變動
+# 卡片詳情顯示稀有度與方向變動
 
 日期：2026-09-07
 狀態：設計定案，待實作
 
 ## 目的
 
-卡池的稀有度每天由收盤價自動重算，但玩家看不出來。點開卡片時，除了現在的稀有度，
-也要看到「是哪一天、從哪一階變過來的」。
+卡池的稀有度與方向每天由收盤價自動重算，但玩家看不出來。點開卡片時，
+除了現在的狀態，也要看到「是哪一天變的、從哪裡變過來的」。
 
-09-04 到 09-07 這一個交易日之間，全市場池 1076 檔裡有 193 檔稀有度改變。
-這些變化目前完全沒有呈現。
+09-04 到 09-07 這一個交易日之間，全市場池 1076 檔裡有 193 檔稀有度改變、
+95 檔方向翻轉。這些變化目前完全沒有呈現。
 
 ## 語意
 
-這欄追的是**稀有度的升降史**，與股價漲跌方向無關。
+追兩條互相獨立的變動史，分別掛在卡片詳情的兩列上：
 
-- 稀有度改變（C↔R↔SR↔SSR）才算一次變動。
-- 稀有度不變、但 30 日漲跌由正轉負（漲卡變跌卡）**不算**變動，不更新日期。
-  09-07 有 95 檔屬於這類，全部維持原本的變動紀錄。
+| 追什麼 | 觸發條件 | 顯示在 |
+|---|---|---|
+| 稀有度升降 | 稀有度改變（C↔R↔SR↔SSR） | 「稀有度」列 |
+| 方向翻轉 | 30 日漲跌正負號改變（UP↔DOWN） | 「30 日漲跌」列 |
+
+兩者各自獨立計日：稀有度變動不更新方向日期，方向翻轉也不更新稀有度日期。
+一檔股票可能只動其中一項，也可能同一天兩項都動。
 
 ## 資料
 
-`snapshot_stocks` 新增兩欄，皆可為 null：
+`snapshot_stocks` 新增三欄，皆可為 null：
 
 | 欄位 | 型別 | 內容 |
 |---|---|---|
 | `prev_rarity` | TEXT | 上一個不同的稀有度 |
 | `rarity_changed_on` | TEXT | 變成現在這個稀有度的日期（YYYY-MM-DD） |
+| `direction_changed_on` | TEXT | 方向翻成現在這個方向的日期（YYYY-MM-DD） |
 
 升階或降階不另外存，渲染時用 `RARITY_RANK` 比較 `prev_rarity` 與 `rarity` 現算。
 存了就有兩份真相，改一邊忘另一邊就會不一致。
+
+方向同理不存前值：方向只有 UP／DOWN 兩種，發生翻轉就代表翻到了現在這個方向，
+用現有的 `direction` 欄即可決定用詞。
 
 ### 逐日沿用
 
@@ -40,16 +48,23 @@
 
 ```
 prev = 上一個快照日該股的列
-prev 不存在        → prev_rarity = null,       rarity_changed_on = null
-prev.rarity 相同   → 兩欄都繼承 prev 的值（可能仍是 null）
-prev.rarity 不同   → prev_rarity = prev.rarity, rarity_changed_on = 今日
+
+稀有度：
+  prev 不存在        → prev_rarity = null,       rarity_changed_on = null
+  prev.rarity 相同   → 兩欄都繼承 prev 的值（可能仍是 null）
+  prev.rarity 不同   → prev_rarity = prev.rarity, rarity_changed_on = 今日
+
+方向：
+  prev 不存在           → direction_changed_on = null
+  prev.direction 相同   → 繼承 prev.direction_changed_on（可能仍是 null）
+  prev.direction 不同   → direction_changed_on = 今日
 ```
 
 每檔 O(1)，不需要載入額外的價格資料，因此不動 `PRICE_WINDOW_DAYS`，
 也不會逼近 Worker isolate 的 128 MB 上限。
 
-稀有度只由 `change30d` 決定、與卡池無關，所以 streak 以 `stock_code` 算一次，
-17 個池寫入同一個值。否則同一檔股票在不同池可能顯示不同的變動日。
+稀有度與方向都只由 `change30d` 決定、與卡池無關，所以兩者都以 `stock_code` 算一次，
+17 個池寫入同一組值。否則同一檔股票在不同池可能顯示不同的變動日。
 
 ### 不回頭重算
 
@@ -58,7 +73,9 @@ prev.rarity 不同   → prev_rarity = prev.rarity, rarity_changed_on = 今日
 
 ## 顯示
 
-位置：卡片詳情既有的「稀有度」列，不新增列。
+都掛在卡片詳情既有的列上，不新增列。有變動紀錄才加這段前綴，沒有就維持原樣。
+
+### 「稀有度」列
 
 | 情況 | 顯示 |
 |---|---|
@@ -67,7 +84,20 @@ prev.rarity 不同   → prev_rarity = prev.rarity, rarity_changed_on = 今日
 | 未知／從未變動 | `C　常規` |
 | 空池降級卡 | `（09-07）自R卡降階　C　常規（原始 R 降級）` |
 
-日期格式：與該卡資料日同年寫 `09-07`，跨年寫完整 `2025-09-07`。
+### 「30 日漲跌」列
+
+方向決定卡片框體：UP 用稀有度色描邊，DOWN 用黑邊（暗卡），見
+`components/cards/StockCard.tsx`。用詞照這個視覺結果走。
+
+| 情況 | 顯示 |
+|---|---|
+| 由漲轉跌（翻成暗卡），09-07 | `（09-07）翻黑　▼ −4.97%` |
+| 由跌轉漲，09-07 | `（09-07）轉白　▲ +6.20%` |
+| 未知／從未翻轉 | `▼ −4.97%` |
+
+### 日期格式
+
+兩列共用：與該卡資料日同年寫 `09-07`，跨年寫完整 `2025-09-07`。
 只寫月日的話，一檔一年多沒變動的股票會分不出是哪一年。
 
 ### 已知用詞衝突
@@ -80,34 +110,35 @@ prev.rarity 不同   → prev_rarity = prev.rarity, rarity_changed_on = 今日
 
 | 檔案 | 改動 |
 |---|---|
-| `drizzle/0002_snapshot-stocks-rarity-change.sql` | 兩個 `ALTER TABLE ADD COLUMN` |
+| `drizzle/0002_snapshot-stocks-change-marks.sql` | 三個 `ALTER TABLE ADD COLUMN` |
 | `lib/db/schema.ts` | 欄位定義 |
-| `lib/pool/snapshot.ts` | 新純函式 `resolveRarityChange(prev, currentRarity, date)` |
-| `lib/pool/generate.ts` | 讀前一快照日、寫新欄位、upsert `set` 補兩欄、批次大小 9 → 7 |
-| `lib/api/types.ts` | `DrawCard` 加 `prevRarity` / `rarityChangedOn` |
-| `lib/gacha/service.ts` | select 帶出兩欄 |
-| `components/cards/CardDetail.tsx` | 稀有度列 |
+| `lib/pool/snapshot.ts` | 新純函式 `resolveChangeMarks(prev, current, date)` |
+| `lib/pool/generate.ts` | 讀前一快照日、寫新欄位、upsert `set` 補三欄、批次大小 9 → 7 |
+| `lib/api/types.ts` | `DrawCard` 加 `prevRarity` / `rarityChangedOn` / `directionChangedOn` |
+| `lib/gacha/service.ts` | select 帶出三欄 |
+| `components/cards/CardDetail.tsx` | 稀有度列、30 日漲跌列 |
 | `lib/pool/snapshot.test.ts` | 純函式分支測試 |
 
 ### 批次大小
 
 `generate.ts` 的 upsert 批次是照 D1「單查詢上限 100 個綁定參數」算的：
-目前 11 欄 → 每批 9 列。加兩欄變 13 欄，每批要降到 7 列，否則超限。
+目前 11 欄 → 每批 9 列。加三欄變 14 欄，每批要降到 7 列（7 × 14 = 98），否則超限。
 
 ### 相容性
 
-抽卡紀錄存在 localStorage，舊紀錄沒有這兩個欄位，讀出來是 `undefined`，
-走「未知」分支顯示 `C　常規`，不會壞。
+抽卡紀錄存在 localStorage，舊紀錄沒有這三個欄位，讀出來是 `undefined`，
+走「未知」分支顯示原本的內容，不會壞。
 
 ## 測試
 
-`resolveRarityChange` 是純函式，用現成的 vitest（node 環境、`lib/**`）測四個分支：
-無前一日、稀有度相同且前值為 null、稀有度相同且前值有日期、稀有度不同。
+`resolveChangeMarks` 是純函式，用現成的 vitest（node 環境、`lib/**`）測：
+無前一日、稀有度相同且前值為 null、稀有度相同且前值有日期、稀有度不同、
+方向相同、方向不同，以及「稀有度變了但方向沒變」與其反例——確認兩條變動史互不干擾。
 不需要新增測試框架或 jsdom。
 
 ## 上線後
 
 1. 對 `--remote` 套用 migration。
 2. 手動跑一次 `npm run snapshot`（冪等）重生 09-07 快照。
-   前一日 09-04 有稀有度可比，193 檔稀有度變動的股票立刻拿到變動日，
-   不必等下一個交易日。
+   前一日 09-04 有稀有度與方向可比，193 檔稀有度變動、95 檔方向翻轉的股票
+   立刻拿到變動日，不必等下一個交易日。
