@@ -9,6 +9,7 @@ import type { SectorTheme } from "@/lib/sectors/defs";
 import { placeholder } from "@/lib/sectors/defs";
 import { RARITY_COLOR, RARITY_FX } from "@/lib/fx/core";
 import { useLowFx } from "@/lib/hooks/useLowFx";
+import { directionChangeMark, rarityChangeMark } from "@/lib/cards/marks";
 
 // 放大檢視的卡片資料：抽卡結果與抽卡紀錄共用
 export interface CardDetailData extends DrawCard {
@@ -136,6 +137,21 @@ export function CardDetail({
   const up = card.direction === "UP";
   const rar = RARITY_COLOR[card.rarity];
 
+  // 變動標記：資料日當參考日決定要不要寫出年份。沒有紀錄時兩者皆為 null，
+  // 該列就維持原本內容。
+  const refDate = card.snapshotDate ?? null;
+  const rarMark = rarityChangeMark(
+    card.prevRarity,
+    card.rarity,
+    card.rarityChangedOn,
+    refDate,
+  );
+  const dirMark = directionChangeMark(
+    card.direction,
+    card.directionChangedOn,
+    refDate,
+  );
+
   const rows: { label: string; value: React.ReactNode }[] = [
     { label: "公司名稱", value: card.stockName },
     { label: "股票代號", value: <span className="font-mono">{card.stockCode}</span> },
@@ -143,9 +159,12 @@ export function CardDetail({
     {
       label: "30 日漲跌",
       value: (
-        <span className="font-mono font-bold" style={{ color: up ? "var(--up)" : "var(--down)" }}>
-          {up ? "▲" : "▼"} {fmtPct(card.change30d)}
-        </span>
+        <>
+          {dirMark && <span className="dim mr-2 text-xs">{dirMark}</span>}
+          <span className="font-mono font-bold" style={{ color: up ? "var(--up)" : "var(--down)" }}>
+            {up ? "▲" : "▼"} {fmtPct(card.change30d)}
+          </span>
+        </>
       ),
     },
     { label: "昨日收盤", value: <span className="font-mono font-bold">{card.close}</span> },
@@ -163,12 +182,15 @@ export function CardDetail({
     {
       label: "稀有度",
       value: (
-        <span className="font-bold" style={{ color: rar }}>
-          {card.rarity}　{RARITY_TIER_NAME[card.rarity]}
-          {card.rolledRarity !== card.rarity && (
-            <span className="dim ml-2 text-xs">（原始 {card.rolledRarity} 降級）</span>
-          )}
-        </span>
+        <>
+          {rarMark && <span className="dim mr-2 text-xs">{rarMark}</span>}
+          <span className="font-bold" style={{ color: rar }}>
+            {card.rarity}　{RARITY_TIER_NAME[card.rarity]}
+            {card.rolledRarity !== card.rarity && (
+              <span className="dim ml-2 text-xs">（原始 {card.rolledRarity} 降級）</span>
+            )}
+          </span>
+        </>
       ),
     },
     { label: "資料日", value: card.snapshotDate ?? "—" },
