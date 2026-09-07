@@ -56,3 +56,6 @@ next-env.d.ts
 # skills 工具安裝物（可用 npx skills add 重裝）
 .agents/
 skills-lock.json
+
+# 本機開發工具設定（dev server 啟動設定，各人環境不同）
+.claude/launch.json
