@@ -1,10 +1,15 @@
 import "server-only";
 import { unstable_cache } from "next/cache";
 import { getDb } from "@/lib/db/client";
-import { boards, poolSnapshots, pools, snapshotStocks } from "@/lib/db/schema";
+import { boards, poolSnapshots, pools, snapshotStocks, stocks } from "@/lib/db/schema";
 import { BOARD_MAP, MARKET_POOL } from "@/lib/sectors/defs";
-import type { PoolInfo, PoolSnapshotInfo } from "@/lib/api/types";
-import { eq, inArray, sql } from "drizzle-orm";
+import { toChangeCards } from "@/lib/pool/changes";
+import type {
+  PoolInfo,
+  PoolSnapshotInfo,
+  SnapshotChanges,
+} from "@/lib/api/types";
+import { and, desc, eq, inArray, or, sql } from "drizzle-orm";
 
 // 頁面（server component）與 /api/pools 共用的卡池查詢
 //
@@ -181,3 +186,103 @@ export const getActivePoolsWithRarity = unstable_cache(
   ["active-pools-rarity"],
   { tags: [POOLS_CACHE_TAG], revalidate: CACHE_TTL_SECONDS },
 );
+
+// ── 當日變動清單（GET /api/snapshot） ──────────────────────────────────────
+//
+// 只查全市場池：它是所有上市普通股的超集，每檔一列，不必跨池去重。
+// 變動標記（rarity_changed_on / direction_changed_on）逐日沿用，因此
+// 「當天有變動」＝標記日期等於快照日；過濾條件直接下到 SQL，不把整份
+// 快照（每日約 1,100 列）拉進 Worker 記憶體。
+async function loadSnapshotChanges(
+  date: string | null,
+): Promise<SnapshotChanges | null> {
+  const db = await getDb();
+  const [marketPool] = await db
+    .select({ poolId: pools.poolId })
+    .from(pools)
+    .where(and(eq(pools.poolType, "market"), eq(pools.active, true)))
+    .orderBy(pools.sortOrder)
+    .limit(1);
+  if (!marketPool) return null;
+
+  const [snapshot] = await db
+    .select({
+      snapshotDate: poolSnapshots.snapshotDate,
+      stockCount: poolSnapshots.stockCount,
+      upStockCount: poolSnapshots.upStockCount,
+      downStockCount: poolSnapshots.downStockCount,
+    })
+    .from(poolSnapshots)
+    .where(
+      and(
+        eq(poolSnapshots.poolId, marketPool.poolId),
+        date ? eq(poolSnapshots.snapshotDate, date) : undefined,
+      ),
+    )
+    .orderBy(desc(poolSnapshots.snapshotDate))
+    .limit(1);
+  if (!snapshot) return null;
+
+  const snapshotDate = snapshot.snapshotDate;
+  const rows = await db
+    .select({
+      stockCode: snapshotStocks.stockCode,
+      stockName: stocks.name,
+      boardCode: stocks.boardCode,
+      direction: snapshotStocks.direction,
+      rarity: snapshotStocks.rarity,
+      prevRarity: snapshotStocks.prevRarity,
+      close: snapshotStocks.close,
+      change1d: snapshotStocks.change1d,
+      change30d: snapshotStocks.change30d,
+      rarityChangedOn: snapshotStocks.rarityChangedOn,
+      directionChangedOn: snapshotStocks.directionChangedOn,
+    })
+    .from(snapshotStocks)
+    .innerJoin(stocks, eq(stocks.stockCode, snapshotStocks.stockCode))
+    .where(
+      and(
+        eq(snapshotStocks.snapshotDate, snapshotDate),
+        eq(snapshotStocks.poolId, marketPool.poolId),
+        or(
+          eq(snapshotStocks.rarityChangedOn, snapshotDate),
+          eq(snapshotStocks.directionChangedOn, snapshotDate),
+        ),
+      ),
+    );
+
+  const allBoards = await db.select().from(boards);
+  const cards = toChangeCards(
+    rows,
+    new Map(allBoards.map((b) => [b.tagId, b.tagName])),
+    snapshotDate,
+  );
+
+  return {
+    snapshotDate,
+    stockCount: snapshot.stockCount,
+    upStockCount: snapshot.upStockCount,
+    downStockCount: snapshot.downStockCount,
+    rarityChangedCount: cards.filter((c) => c.rarityChanged).length,
+    directionChangedCount: cards.filter((c) => c.directionChanged).length,
+    cards,
+  };
+}
+
+/**
+ * 某一快照日的變動卡片清單；date 省略＝最新快照日。查無該日快照回 null。
+ *
+ * 每個日期各自一個快取項：unstable_cache 以 keyParts 決定快取鍵，所以包裝函式
+ * 要在呼叫時帶著日期現做，不能像上面兩個查詢那樣在模組層建一次（那樣所有日期
+ * 會共用同一個鍵，第二個日期會讀到第一個的結果）。
+ * 快取與卡池共用 POOLS_CACHE_TAG，快照 cron 完成時一起失效。
+ */
+export function getSnapshotChanges(
+  date: string | null,
+): Promise<SnapshotChanges | null> {
+  return unstable_cache(
+    () => loadSnapshotChanges(date),
+    ["snapshot-changes", date ?? "latest"],
+    { tags: [POOLS_CACHE_TAG], revalidate: CACHE_TTL_SECONDS },
+  )();
+}

@@ -81,6 +81,7 @@ npm run deploy           # 部署到 Cloudflare Workers（含 cron trigger）
 |---|---|
 | `GET /api/pools` | 卡池清單＋最新快照 |
 | `POST /api/draw` | `{poolId, drawType: single\|ten}` 抽卡 |
+| `GET /api/snapshot` | `?date=YYYY-MM-DD`（省略＝最新快照日）；當日變動卡片清單（升降階、翻黑／轉白） |
 | `GET /api/cron/snapshot` | Bearer `CRON_SECRET`；抓收盤＋生成快照（冪等） |
 
 ## 已知限制（beta）
