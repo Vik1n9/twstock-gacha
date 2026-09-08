@@ -46,7 +46,8 @@ export function toChangeCards(
         close: r.close,
         change1d: r.change1d,
         change30d: r.change30d,
-        rarityChanged,
+        rarityChangedOn: r.rarityChangedOn,
+        directionChangedOn: r.directionChangedOn,
         // prevRarity 為 null＝這一檔在有變動標記欄位之前就已是現在的稀有度，
         // 判不出升降（見 resolveChangeMarks），所以 move 也給 null。
         rarityMove:
@@ -55,7 +56,6 @@ export function toChangeCards(
               ? "up"
               : "down"
             : null,
-        directionChanged: r.directionChangedOn === snapshotDate,
       } satisfies SnapshotChangeCard;
     })
     .sort(

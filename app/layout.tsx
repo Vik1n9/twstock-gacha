@@ -29,6 +29,9 @@ export default function RootLayout({
               <Link href="/history" className="dim hover:text-[var(--ink)]">
                 紀錄
               </Link>
+              <Link href="/changes" className="dim hover:text-[var(--ink)]">
+                變動
+              </Link>
               <Link href="/pools" className="dim hover:text-[var(--ink)]">
                 卡池
               </Link>

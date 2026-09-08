@@ -263,8 +263,11 @@ async function loadSnapshotChanges(
     stockCount: snapshot.stockCount,
     upStockCount: snapshot.upStockCount,
     downStockCount: snapshot.downStockCount,
-    rarityChangedCount: cards.filter((c) => c.rarityChanged).length,
-    directionChangedCount: cards.filter((c) => c.directionChanged).length,
+    rarityChangedCount: cards.filter((c) => c.rarityChangedOn === snapshotDate)
+      .length,
+    directionChangedCount: cards.filter(
+      (c) => c.directionChangedOn === snapshotDate,
+    ).length,
     cards,
   };
 }
@@ -282,7 +285,9 @@ export function getSnapshotChanges(
 ): Promise<SnapshotChanges | null> {
   return unstable_cache(
     () => loadSnapshotChanges(date),
-    ["snapshot-changes", date ?? "latest"],
+    // 版本前綴：回傳欄位改過形狀時要換掉，否則舊快取項會以舊形狀被讀回來
+    // （stale-while-revalidate 會先送舊值），前台就少了新欄位。
+    ["snapshot-changes", "v2", date ?? "latest"],
     { tags: [POOLS_CACHE_TAG], revalidate: CACHE_TTL_SECONDS },
   )();
 }
