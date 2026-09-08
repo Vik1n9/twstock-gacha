@@ -61,3 +61,29 @@ export interface DrawOutcome {
   board30dStrength: number | null;
   cards: DrawCard[];
 }
+
+// 某一快照日的變動卡片（GET /api/snapshot）
+export interface SnapshotChangeCard {
+  stockCode: string;
+  stockName: string;
+  boardName: string | null; // 個股主板塊；無歸屬為 null
+  direction: "UP" | "DOWN";
+  rarity: "C" | "R" | "SR" | "SSR";
+  prevRarity: "C" | "R" | "SR" | "SSR" | null; // 上一個不同的稀有度
+  close: number;
+  change1d: number | null;
+  change30d: number;
+  rarityChanged: boolean; // 這一天升／降階
+  rarityMove: "up" | "down" | null; // prevRarity 為 null 時判不出升降
+  directionChanged: boolean; // 這一天翻黑／轉白
+}
+
+export interface SnapshotChanges {
+  snapshotDate: string;
+  stockCount: number; // 全市場池當日檔數
+  upStockCount: number;
+  downStockCount: number;
+  rarityChangedCount: number;
+  directionChangedCount: number;
+  cards: SnapshotChangeCard[];
+}
