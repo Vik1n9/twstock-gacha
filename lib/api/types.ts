@@ -73,9 +73,11 @@ export interface SnapshotChangeCard {
   close: number;
   change1d: number | null;
   change30d: number;
-  rarityChanged: boolean; // 這一天升／降階
-  rarityMove: "up" | "down" | null; // prevRarity 為 null 時判不出升降
-  directionChanged: boolean; // 這一天翻黑／轉白
+  // 變動標記日期沿用 DrawCard 的語意與欄位名，卡面／卡片詳情可直接吃這個物件。
+  // 「這一天變動」＝日期等於 snapshotDate；清單只收兩者其一等於快照日的卡。
+  rarityChangedOn: string | null;
+  directionChangedOn: string | null;
+  rarityMove: "up" | "down" | null; // 當天升／降階；prevRarity 為 null 時判不出
 }
 
 export interface SnapshotChanges {

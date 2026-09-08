@@ -32,9 +32,9 @@ describe("toChangeCards", () => {
       DATE,
     );
     expect(cards.map((c) => c.stockCode)).toEqual(["1111", "3333"]);
-    expect(cards[0].rarityChanged).toBe(true);
-    expect(cards[0].directionChanged).toBe(false);
-    expect(cards[1].directionChanged).toBe(true);
+    expect(cards[0].rarityChangedOn).toBe(DATE);
+    expect(cards[0].directionChangedOn).toBeNull();
+    expect(cards[1].directionChangedOn).toBe(DATE);
   });
 
   it("升降階以 prevRarity 判定；prevRarity 為 null 時 move 為 null", () => {
@@ -99,8 +99,8 @@ describe("toChangeCards", () => {
       boardNames,
       DATE,
     );
-    expect(card.rarityChanged).toBe(true);
-    expect(card.directionChanged).toBe(true);
+    expect(card.rarityChangedOn).toBe(DATE);
+    expect(card.directionChangedOn).toBe(DATE);
     expect(card.rarityMove).toBe("up");
     expect(card.direction).toBe("DOWN");
   });

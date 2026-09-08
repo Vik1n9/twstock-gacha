@@ -68,18 +68,19 @@ Workers Free 每日 100,000 列、Workers Paid 每月內含 5,000 萬列。
 | 1 | 開啟首頁 `/` | 卡池清單＋各池最新快照摘要（`getActivePools`） | 3 |
 | 2 | 進 `/pools`、`/odds`、`/api/pools` | 再加上各池方向×稀有度張數（`getActivePoolsWithRarity`） | 4 |
 | 3 | 按下單抽／十連 | 該池當日可抽個股明細（`POST /api/draw`） | 5～6 |
+| — | 進 `/changes` | 當日變動卡片（`getSnapshotChanges`，同 `/api/snapshot`） | 4 |
 
 卡池資料每個交易日只在 cron 快照後變動一次，故 1、2 以 `unstable_cache`
 （tag `pools`）快取；`/api/cron/snapshot` 生成新快照後會 `revalidateTag` 失效。
 
-`GET /api/snapshot` 走同一套快取（同 tag，但每個日期各一個快取項）。它只查全市場池
+`/changes` 與 `GET /api/snapshot` 走同一套快取（同 tag，但每個日期各一個快取項）。它只查全市場池
 ——那是所有上市普通股的超集，每檔一列，不必跨池去重——而且「當天有變動」的條件
 （`rarity_changed_on` / `direction_changed_on` 等於快照日）直接下到 SQL，回傳的是
 當日變動的一兩百列，不是整份約 1,100 列的快照。
 
 前端 JS 同樣分階段：GSAP 與所有演出元件集中在 `components/gacha/performance.ts`，
 由 `lib/hooks/useIdlePreload.ts` 動態載入 —— 首屏不下載，瀏覽器閒置時才背景取，
-按下抽卡（或在 `/history` 點卡片）時才保證就緒。**新增演出元件時記得一併加進
+按下抽卡（或在 `/history`、`/changes` 點卡片）時才保證就緒。**新增演出元件時記得一併加進
 `performance.ts` 匯出**，否則它會被靜態 import 拉回首屏。
 
 | 頁面 | 首屏 route JS |
