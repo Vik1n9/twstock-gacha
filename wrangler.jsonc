@@ -38,6 +38,14 @@
       "database_id": "5e43d882-a464-443c-98b0-93eaf60cc12d"
     }
   ],
+  // Custom domain on voriens.dev; workers.dev stays on
+  "workers_dev": true,
+  "routes": [
+    {
+      "pattern": "twstock-gacha.voriens.dev",
+      "custom_domain": true
+    }
+  ],
   "triggers": {
     "crons": [
       "0 10 * * 1-5"

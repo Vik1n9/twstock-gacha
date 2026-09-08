@@ -1,6 +1,7 @@
 # 台股抽卡所
 
-**線上版**：https://twstock-gacha.twstock-gacha.workers.dev
+**線上版**：https://twstock-gacha.voriens.dev  
+（舊網址仍有效：https://twstock-gacha.twstock-gacha.workers.dev）
 
 用真實台股行情驅動的抽卡遊戲：稀有度看個股**近 30 個日曆日漲跌幅**，卡池按板塊切。
 
