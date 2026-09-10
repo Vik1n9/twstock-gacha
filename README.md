@@ -5,7 +5,7 @@
 
 用真實台股行情驅動的抽卡遊戲：稀有度看個股**近 30 個日曆日漲跌幅**，卡池按板塊切。
 
-> Beta：16 板塊池＋全市場池已上線（上市普通股約 1,084 檔）。精選池、還原股價還沒做。
+> Beta：16 板塊池＋全市場池＋台灣50池已上線（上市普通股約 1,084 檔）。還原股價還沒做。
 
 ## 這是什麼
 
@@ -20,7 +20,7 @@
 
 站內「變動」頁（`/changes`）用卡片牆列出當日所有升階／降階／翻黑／轉白的個股，可依變動類型與稀有度篩選。
 
-卡池一覽與產業對照見站內「卡池列表」。板塊分類採 TWSE 產業別＋主題合併；AI 池為人工策展。
+卡池一覽與產業對照見站內「卡池列表」。板塊分類採 TWSE 產業別＋主題合併；AI 池與台灣50池（參考 0050 成分）為人工策展。
 
 ## 技術棧
 
@@ -42,7 +42,7 @@ npm run db:generate            # schema 異動時產生 migration SQL（drizzle-
 npx wrangler d1 execute twstock-gacha --local --file ./drizzle/0000_init-d1.sql --yes  # 本機 D1 建表
 npx wrangler d1 execute twstock-gacha --local --file ./drizzle/0001_pool-snapshots-pool-idx.sql --yes
 npx wrangler d1 execute twstock-gacha --local --file ./drizzle/0002_snapshot-stocks-change-marks.sql --yes
-npm run seed                   # 16 板塊 + 全市場池 + 上市普通股 + 板塊映射（經 D1 HTTP API）
+npm run seed                   # 16 板塊 + 全市場池 + 台灣50池 + 上市普通股 + 板塊映射（經 D1 HTTP API）
 npm run backfill               # 回填 60 日曆天收盤價（結束後統一算一次 change1d）
 npm run recompute              # 手動重算 change1d（校正用，可 --from / --to）
 npm run snapshot               # 生成最新交易日快照（可 --date YYYY-MM-DD）

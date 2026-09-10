@@ -306,3 +306,24 @@ export const MARKET_POOL = {
     ssrSignature: "wafer_burst",
   } satisfies SectorTheme,
 };
+
+// 精選池（企劃書 2.1）：台灣市值前 50 大權值股，以 0050 成分股為基準的人工策展池。
+// 成員清單在 lib/sectors/featured-curate.ts；非板塊池，relatedTagId 為 null。
+export const FEATURED_POOL = {
+  poolId: "POOL_TOP50",
+  poolCode: "TOP50",
+  poolName: "台灣50池",
+  tagName: "台灣50", // 顯示名稱，與其他卡池（半導體、全市場…）對齊，不帶「池」
+  poolType: "featured" as const,
+  minStockCount: 30,
+  description: "台灣市值前 50 大權值股（參考 0050 成分，人工策展）",
+  theme: {
+    primary: "#00BFA5", // 御璽綠
+    accent: "#FFD54F", // 金
+    bg: "#07130F",
+    particleShape: "coin",
+    motif: "skyline",
+    tenLayout: "grid",
+    ssrSignature: "core_explosion",
+  } satisfies SectorTheme,
+};

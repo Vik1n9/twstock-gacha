@@ -2,7 +2,7 @@ import { getActivePoolsWithRarity } from "@/lib/pool/query";
 
 export const dynamic = "force-dynamic";
 
-// 企劃書 18 機率揭露頁（alpha：僅板塊池；全市場池與精選池 beta 開放）
+// 企劃書 18 機率揭露頁（全市場池、台灣50池與板塊池皆已開放）
 export default async function OddsPage() {
   const pools = await getActivePoolsWithRarity();
 
@@ -16,9 +16,9 @@ export default async function OddsPage() {
         <ul className="list-disc space-y-2 pl-5 text-sm leading-relaxed">
           <li>全市場卡池之上漲與下跌方向機率各為 50%（企劃書 9.1，固定值）。</li>
           <li>
-            板塊卡池之上漲與下跌方向機率，依當日該板塊內可抽股票之實際漲跌分布計算：
+            板塊卡池與精選卡池之上漲與下跌方向機率，依當日該池內可抽股票之實際漲跌分布計算：
             <code className="mx-1 rounded bg-[var(--panel-2)] px-1.5 py-0.5 font-mono text-xs">
-              板塊池上漲機率 = 板塊池內上漲股票數 ÷ 板塊池內可抽股票總數
+              池內上漲機率 = 池內上漲股票數 ÷ 池內可抽股票總數
             </code>
           </li>
         </ul>
@@ -81,7 +81,7 @@ export default async function OddsPage() {
             該池方向機率即為該方向 100%，並於上方「當日各卡池分布」揭露
           </li>
           <li>需有最近完整交易日收盤價，且 30 個日曆日前有可用收盤價方可入池</li>
-          <li>板塊卡池範圍：上市普通股依 TWSE 產業別映射至板塊；AI 池為人工策展主題池，股票可同時屬於多個卡池</li>
+          <li>板塊卡池範圍：上市普通股依 TWSE 產業別映射至板塊；AI 池為人工策展主題池，台灣50池為參考 0050 成分的市值前 50 大權值股，股票可同時屬於多個卡池</li>
         </ul>
       </section>
 
@@ -127,7 +127,7 @@ export default async function OddsPage() {
           </tbody>
         </table>
         <p className="dim mt-3 text-xs leading-relaxed">
-          實際機率以當日卡池快照與系統公告為準。若指定稀有度於該板塊池中無可抽股票，系統將依空池處理規則調整（降級後抽出）。每日精選池於後續版本開放。
+          實際機率以當日卡池快照與系統公告為準。若指定稀有度於該池中無可抽股票，系統將依空池處理規則調整（降級後抽出）。
         </p>
       </section>
     </div>

@@ -2,7 +2,7 @@ import "server-only";
 import { unstable_cache } from "next/cache";
 import { getDb } from "@/lib/db/client";
 import { boards, poolSnapshots, pools, snapshotStocks, stocks } from "@/lib/db/schema";
-import { BOARD_MAP, MARKET_POOL } from "@/lib/sectors/defs";
+import { BOARD_MAP, FEATURED_POOL, MARKET_POOL } from "@/lib/sectors/defs";
 import { toChangeCards } from "@/lib/pool/changes";
 import type {
   PoolInfo,
@@ -87,7 +87,7 @@ async function loadActivePools(withRarityCounts: boolean): Promise<PoolInfo[]> {
     const snapshot = snapshotByPool.get(pool.poolId);
     const board = pool.relatedTagId ? boardByTag.get(pool.relatedTagId) : undefined;
 
-    // 全市場池無板塊定義 → 合成 board 物件（企劃書 2.1）
+    // 全市場池與精選池無板塊定義 → 合成 board 物件（企劃書 2.1）
     const boardInfo: PoolInfo["board"] = board
       ? {
           tagId: board.tagId,
@@ -102,7 +102,14 @@ async function loadActivePools(withRarityCounts: boolean): Promise<PoolInfo[]> {
             description: MARKET_POOL.description,
             theme: MARKET_POOL.theme,
           }
-        : null;
+        : pool.poolType === "featured"
+          ? {
+              tagId: FEATURED_POOL.poolCode,
+              tagName: FEATURED_POOL.tagName,
+              description: FEATURED_POOL.description,
+              theme: FEATURED_POOL.theme,
+            }
+          : null;
 
     const snapshotInfo: PoolSnapshotInfo | null = snapshot
       ? {

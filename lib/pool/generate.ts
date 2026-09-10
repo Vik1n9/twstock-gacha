@@ -17,6 +17,7 @@ import {
   type PrevMarkRow,
   type StockMetrics,
 } from "./snapshot";
+import { FEATURED_CURATED_CODES } from "../sectors/featured-curate";
 import { and, eq, gte, lt, lte, desc, inArray } from "drizzle-orm";
 
 export interface GenerateSummary {
@@ -32,7 +33,8 @@ export interface GenerateSummary {
 }
 
 // 池成員查詢：板塊池＝stock_boards 映射（企劃書 16.2，跨池為常態）；
-// 全市場池＝所有活躍上市普通股（企劃書 2.1）
+// 全市場池＝所有活躍上市普通股（企劃書 2.1）；
+// 精選池＝人工策展名單（featured-curate.ts，非 stock_boards）
 async function getPoolStockCodes(pool: Pool): Promise<string[]> {
   const db = await getDb();
   if (pool.poolType === "market") {
@@ -42,6 +44,7 @@ async function getPoolStockCodes(pool: Pool): Promise<string[]> {
       .where(eq(stocks.active, true));
     return rows.map((r) => r.c);
   }
+  if (pool.poolType === "featured") return FEATURED_CURATED_CODES;
   if (!pool.relatedTagId) return [];
   const rows = await db
     .select({ c: stocks.stockCode })
@@ -77,7 +80,10 @@ export async function generatePoolSnapshots(
     .select()
     .from(pools)
     .where(
-      and(eq(pools.active, true), inArray(pools.poolType, ["board", "market"])),
+      and(
+        eq(pools.active, true),
+        inArray(pools.poolType, ["board", "market", "featured"]),
+      ),
     );
 
   // 前一個快照日的變動標記。稀有度與方向都只由 change30d 決定、與卡池無關，

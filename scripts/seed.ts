@@ -1,7 +1,8 @@
 import { loadEnv } from "../lib/db/env";
-import { BOARD_DEFS, MARKET_POOL, poolIdFor } from "../lib/sectors/defs";
+import { BOARD_DEFS, FEATURED_POOL, MARKET_POOL, poolIdFor } from "../lib/sectors/defs";
 import { TWSE_INDUSTRY_TO_BOARD } from "../lib/sectors/industry-map";
 import { AI_CURATED_CODES } from "../lib/sectors/ai-curate";
+import { FEATURED_CURATED_CODES } from "../lib/sectors/featured-curate";
 import { sql } from "drizzle-orm";
 
 loadEnv();
@@ -93,6 +94,14 @@ async function dryRun(): Promise<void> {
       }).join("\n"),
   );
   console.log(`AI 策展：${aiValid.length}/${AI_CURATED_CODES.length} 檔存在於上市清單`);
+  const featuredValid = FEATURED_CURATED_CODES.filter((c) => codes.has(c));
+  console.log(
+    `精選池：${featuredValid.length}/${FEATURED_CURATED_CODES.length} 檔存在於上市清單`,
+  );
+  const featuredMissing = FEATURED_CURATED_CODES.filter((c) => !codes.has(c));
+  if (featuredMissing.length > 0) {
+    console.log(`  精選池查無此代號：${featuredMissing.join(", ")}`);
+  }
   const unmapped = all.filter((s) => !s.boardCode).length;
   console.log(`無板塊歸屬（僅進全市場池）：${unmapped} 檔`);
   console.log(
@@ -108,7 +117,7 @@ async function seedToDb(): Promise<void> {
   const { getDb } = await import("../lib/db/client");
   const db = await getDb();
   const { boards, pools, stocks, stockBoards } = await import("../lib/db/schema");
-  const { and, eq, notInArray } = await import("drizzle-orm");
+  const { and, eq, inArray, notInArray } = await import("drizzle-orm");
 
   try {
     // 1) 板塊定義（16 板塊）
@@ -121,7 +130,7 @@ async function seedToDb(): Promise<void> {
           description: b.description,
           themeColor: b.theme.primary,
           active: b.active,
-          sortOrder: i + 1, // 0 留給全市場池
+          sortOrder: i + 2, // 0 全市場池、1 精選池，板塊自 2 起
         })
         .onConflictDoUpdate({
           target: boards.tagId,
@@ -130,7 +139,7 @@ async function seedToDb(): Promise<void> {
             description: b.description,
             themeColor: b.theme.primary,
             active: b.active,
-            sortOrder: i + 1,
+            sortOrder: i + 2,
           },
         });
     }
@@ -157,6 +166,30 @@ async function seedToDb(): Promise<void> {
         },
       });
 
+    // 2b) 精選池（企劃書 2.1）：成員來自 featured-curate.ts，非 stock_boards
+    await db
+      .insert(pools)
+      .values({
+        poolId: FEATURED_POOL.poolId,
+        poolCode: FEATURED_POOL.poolCode,
+        poolName: FEATURED_POOL.poolName,
+        poolType: FEATURED_POOL.poolType,
+        relatedTagId: null,
+        active: true,
+        minStockCount: FEATURED_POOL.minStockCount,
+        sortOrder: 1,
+      })
+      .onConflictDoUpdate({
+        target: pools.poolId,
+        set: {
+          poolName: FEATURED_POOL.poolName,
+          poolType: FEATURED_POOL.poolType,
+          active: true,
+          minStockCount: FEATURED_POOL.minStockCount,
+          sortOrder: 1,
+        },
+      });
+
     for (const b of BOARD_DEFS.filter((x) => x.active)) {
       await db
         .insert(pools)
@@ -169,7 +202,7 @@ async function seedToDb(): Promise<void> {
           active: true,
           // 卡池常態開放（無鎖池設計）；min_stock_count 僅為營運配置欄位（企劃書 16.3）
           minStockCount: 30,
-          sortOrder: BOARD_DEFS.indexOf(b) + 1,
+          sortOrder: BOARD_DEFS.indexOf(b) + 2, // 0 全市場池、1 精選池
         })
         .onConflictDoUpdate({
           target: pools.poolId,
@@ -177,22 +210,24 @@ async function seedToDb(): Promise<void> {
             poolName: `${b.tagName}池`,
             active: true,
             minStockCount: 30,
+            sortOrder: BOARD_DEFS.indexOf(b) + 2,
           },
         });
     }
     const activeBoards = BOARD_DEFS.filter((b) => b.active);
     console.log(
-      `板塊與卡池 seeded（${BOARD_DEFS.length} 板塊、${activeBoards.length} 板塊池＋全市場池啟用）`,
+      `板塊與卡池 seeded（${BOARD_DEFS.length} 板塊、${activeBoards.length} 板塊池＋全市場池＋精選池啟用）`,
     );
 
     // 3) 股票：全市場上市普通股（無板塊歸屬者也入庫，僅進全市場池）
-    // D1 單查詢上限 100 個綁定參數：每列 6 欄 → 每批最多 16 列
+    // D1 單查詢上限 100 個綁定參數：每列 7 欄，onConflict 另加 1 個 updated_at
+    // → 每批最多 14 列（14×7 + 1 = 99）
     const all = await fetchAllListed();
-    for (let i = 0; i < all.length; i += 16) {
+    for (let i = 0; i < all.length; i += 14) {
       await db
         .insert(stocks)
         .values(
-          all.slice(i, i + 200).map((s) => ({
+          all.slice(i, i + 14).map((s) => ({
             stockCode: s.stockCode,
             name: s.name,
             market: "twse" as const,
@@ -214,12 +249,17 @@ async function seedToDb(): Promise<void> {
         });
     }
 
-    // 已不在清單者停用（含舊 alpha SEMI 名單）
+    // 已不在清單者停用（含舊 alpha SEMI 名單）。
+    // D1 綁定參數上限 100，無法一次 NOT IN 全部約 1,084 個代號；改兩階段：
+    // 先全部停用，再分批把仍在清單者啟用（資料已由上方 upsert 寫入，這裡只調 active）
     const codes = all.map((s) => s.stockCode);
-    await db
-      .update(stocks)
-      .set({ active: false })
-      .where(notInArray(stocks.stockCode, codes));
+    await db.update(stocks).set({ active: false });
+    for (let i = 0; i < codes.length; i += 50) {
+      await db
+        .update(stocks)
+        .set({ active: true })
+        .where(inArray(stocks.stockCode, codes.slice(i, i + 50)));
+    }
 
     // 4) 股票↔板塊映射（企劃書 16.2）：產業別主板塊 ＋ AI 策展副板塊
     const mappings: { stockCode: string; tagId: string; isPrimary: boolean }[] = [];
@@ -233,11 +273,12 @@ async function seedToDb(): Promise<void> {
     for (const c of aiValid) {
       mappings.push({ stockCode: c, tagId: "AI", isPrimary: false });
     }
-    // D1 單查詢上限 100 個綁定參數：每列 3 欄 → 每批最多 30 列
-    for (let i = 0; i < mappings.length; i += 30) {
+    // D1 單查詢上限 100 個綁定參數：每列 4 欄，onConflict 另加 1 個 updated_at
+    // → 每批最多 24 列（24×4 + 1 = 97）
+    for (let i = 0; i < mappings.length; i += 24) {
       await db
         .insert(stockBoards)
-        .values(mappings.slice(i, i + 500))
+        .values(mappings.slice(i, i + 24))
         .onConflictDoUpdate({
           target: [stockBoards.stockCode, stockBoards.tagId],
           set: {
@@ -246,8 +287,13 @@ async function seedToDb(): Promise<void> {
           },
         });
     }
-    // 清掉已不在清單的映射，以及不再策展的 AI 映射
-    await db.delete(stockBoards).where(notInArray(stockBoards.stockCode, codes));
+    // 清掉已不在清單的映射（改以「已停用股票」子查詢，避開 NOT IN 全清單的參數上限），
+    // 以及不再策展的 AI 映射
+    await db
+      .delete(stockBoards)
+      .where(
+        sql`${stockBoards.stockCode} in (select stock_code from stocks where active = 0)`,
+      );
     if (aiValid.length > 0) {
       await db
         .delete(stockBoards)
@@ -259,6 +305,16 @@ async function seedToDb(): Promise<void> {
     }
     console.log(
       `股票 seeded：${all.length} 檔；映射 ${mappings.length} 筆（AI 策展 ${aiValid.length} 檔）`,
+    );
+
+    // 精選池成員來自 featured-curate.ts，不寫 stock_boards；驗證代號仍在上市清單
+    const featuredValid = FEATURED_CURATED_CODES.filter((c) => codeSet.has(c));
+    const featuredMissing = FEATURED_CURATED_CODES.filter((c) => !codeSet.has(c));
+    console.log(
+      `精選池：${featuredValid.length}/${FEATURED_CURATED_CODES.length} 檔存在於上市清單` +
+        (featuredMissing.length > 0
+          ? `（查無：${featuredMissing.join(", ")}）`
+          : ""),
     );
 
     // 5) 驗證
