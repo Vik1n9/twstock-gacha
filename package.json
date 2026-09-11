@@ -17,6 +17,7 @@
     "backfill": "tsx scripts/backfill.ts --days 60",
     "recompute": "tsx scripts/recompute.ts",
     "snapshot": "tsx scripts/snapshot.ts",
+    "check:cron": "tsx scripts/check-cron.ts",
     "test": "vitest run",
     "deploy": "vinext-cloudflare deploy --config dist/server/wrangler.json",
     "cf-typegen": "wrangler types"

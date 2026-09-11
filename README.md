@@ -73,10 +73,30 @@ npm run deploy           # 部署到 Cloudflare Workers（含 cron trigger）
 3. 資料：`npm run seed` + `npm run backfill`。
 4. 密鑰：`npx wrangler secret put CRON_SECRET`。
 5. Cron：`wrangler.jsonc` `triggers.crons`＝`0 10 * * 1-5`（平日台北 18:00）。
-   手動觸發：`curl -H "Authorization: Bearer $CRON_SECRET" https://<worker>.workers.dev/api/cron/snapshot`。
+   手動觸發：`curl -H "Authorization: Bearer $CRON_SECRET" https://twstock-gacha.voriens.dev/api/cron/snapshot`。
    `observability` 已開啟，cron 失敗會留在 Workers Logs（`npx wrangler tail`）。
+   確認線上排程還在：`npm run check:cron`（比對設定與 Cloudflare 實際掛著的 cron）。
 
-> Workers Builds 若接 Git：Install `npm ci`、Build `npm run build`、Deploy 建議用專案的 `npm run deploy -- --skip-build`（不要只用裸的 `npx wrangler deploy`，會少掉 triggers 那段）。
+> Workers Builds 若接 Git：Install `npm ci`、Build `npm run build`、Deploy `npx wrangler deploy`。
+> `npm run build` 會產生 `.wrangler/deploy/config.json`，讓根目錄的 `wrangler deploy`
+> 轉向 `dist/server/wrangler.json`；該檔帶著 `triggers.crons`，`dist/server/index.js`
+> 也帶著 `scheduled()`，所以裸的 `npx wrangler deploy` 不會掉 triggers
+> （可用 `npx wrangler deploy --dry-run` 看它印出 `Using redirected Wrangler configuration`）。
+> 但這個轉向依賴 build 產物存在：若 deploy 時 `dist/` 不在，wrangler 會回頭讀根目錄的
+> `wrangler.jsonc`，改成從 `worker/index.ts` 現場打包——triggers 一樣在，但部署出來的是
+> 另一份產物。所以 build 與 deploy 必須在同一個 workspace，且 deploy 後值得跑一次
+> `npm run check:cron`。
+
+### 快照停在前一個交易日時
+
+1. `npm run check:cron` 看排程還在不在；不在就重新部署。
+2. Workers Logs 篩 `scheduled` invocation：
+   - 完全沒有 `scheduled` ⇒ Cloudflare 根本沒觸發（排程掉了，或該次沒被排到）。
+   - 有 `scheduled` 但報錯 ⇒ 是快照流程本身壞了，錯誤訊息在 log 裡。
+3. 補資料一律打 HTTP 端點，不要用本機 `npm run snapshot`：
+   只有 `/api/cron/snapshot` 會在生成後 `revalidateTag('pools')`，
+   本機 script 直接寫 D1，Worker 的卡池快取不會失效，前台仍會讀到舊快照直到 TTL 到期。
+   端點本身冪等，重跑同一個交易日不會重複計。
 
 ## API
 
