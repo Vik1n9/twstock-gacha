@@ -82,25 +82,6 @@ export async function fetchDailyClose(
   return { date, rows };
 }
 
-// 由今天往前找最近一個有資料的交易日（最多回溯 days 天）
-export async function findLastTradingDay(
-  days = 10,
-): Promise<FetchDailyResult | null> {
-  const now = new Date();
-  for (let i = 0; i < days; i++) {
-    const d = new Date(now);
-    d.setDate(d.getDate() - i);
-    const ymd =
-      `${d.getFullYear()}` +
-      `${String(d.getMonth() + 1).padStart(2, "0")}` +
-      `${String(d.getDate()).padStart(2, "0")}`;
-    const result = await fetchDailyClose(ymd);
-    if (result && result.rows.length > 0) return result;
-    await new Promise((r) => setTimeout(r, 500));
-  }
-  return null;
-}
-
 export function ymdOf(d: Date): string {
   return (
     `${d.getFullYear()}` +

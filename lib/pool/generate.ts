@@ -332,3 +332,15 @@ export async function latestTradingDate(): Promise<string | null> {
     .from(stockPrices);
   return row?.d ?? null;
 }
+
+// 指定日期（含）之後、pool_snapshots 已有快照的交易日，由舊到新。
+// 與 pricedDatesSince 相減即為「有收盤價但沒快照」的日子。
+export async function snapshotDatesSince(since: string): Promise<string[]> {
+  const db = await getDb();
+  const rows = await db
+    .selectDistinct({ date: poolSnapshots.snapshotDate })
+    .from(poolSnapshots)
+    .where(gte(poolSnapshots.snapshotDate, since))
+    .orderBy(poolSnapshots.snapshotDate);
+  return rows.map((r) => r.date);
+}

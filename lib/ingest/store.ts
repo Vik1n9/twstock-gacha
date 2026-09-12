@@ -1,6 +1,6 @@
 import { getDb, batchAll } from "../db/client";
 import { stockPrices, stocks } from "../db/schema";
-import { eq, sql } from "drizzle-orm";
+import { eq, gte, sql } from "drizzle-orm";
 import type { FetchDailyResult } from "../ingest/twse";
 
 export interface StoreOptions {
@@ -34,7 +34,7 @@ export async function storeDailyCloses(
   if (rows.length === 0) return 0;
 
   // 該日已完整入庫就不重寫：收盤價是定案值，重抓只是白白消耗 D1 的每日寫入配額
-  // （findLastTradingDay 找不到當日資料時會往回退，於是每次都重寫前一交易日）。
+  // （cron 的補課會重複探測視窗內的日子，同一天很容易被送進來第二次）。
   // 用「已存列數 < 應寫列數」判斷，先前批次寫到一半失敗的情況仍會補齊。
   // 需要校正時以 npm run recompute 或 --force 明確處理，不放進每日排程。
   if (!opts.force) {
@@ -132,4 +132,16 @@ export async function priceDateRange(): Promise<{ from: string; to: string } | n
     .from(stockPrices);
   if (!row?.from || !row?.to) return null;
   return { from: row.from, to: row.to };
+}
+
+// 指定日期（含）之後、stock_prices 已有資料的交易日，由舊到新。
+// 供 cron 補課判斷「哪幾天還沒入庫」；下界由呼叫端給，查詢量不隨歷史成長。
+export async function pricedDatesSince(since: string): Promise<string[]> {
+  const db = await getDb();
+  const rows = await db
+    .selectDistinct({ date: stockPrices.date })
+    .from(stockPrices)
+    .where(gte(stockPrices.date, since))
+    .orderBy(stockPrices.date);
+  return rows.map((r) => r.date);
 }
