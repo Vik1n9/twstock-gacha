@@ -73,6 +73,8 @@ npm run deploy           # 部署到 Cloudflare Workers（含 cron trigger）
 3. 資料：`npm run seed` + `npm run backfill`。
 4. 密鑰：`npx wrangler secret put CRON_SECRET`。
 5. Cron：`wrangler.jsonc` `triggers.crons`＝`0 10 * * 1-5`（平日台北 18:00）。
+   **不假設每次都有觸發**：每跑一次會先比對 D1 與 TWSE，把視窗內缺漏的交易日
+   由舊往新補齊（單次上限 3 天），再生成快照。詳見 `lib/ingest/catchup.ts`。
    手動觸發：`curl -H "Authorization: Bearer $CRON_SECRET" https://twstock-gacha.voriens.dev/api/cron/snapshot`。
    `observability` 已開啟，cron 失敗會留在 Workers Logs（`npx wrangler tail`）。
    確認線上排程還在：`npm run check:cron`（比對設定與 Cloudflare 實際掛著的 cron）。
@@ -89,14 +91,22 @@ npm run deploy           # 部署到 Cloudflare Workers（含 cron trigger）
 
 ### 快照停在前一個交易日時
 
+cron 有補課機制，漏跑一兩天會在下一次執行時自動補回來（含 `change1d` 重算與
+缺漏日的快照）。所以**先確認下一次 cron 之後是否自己好了**，沒好再往下查。
+
 1. `npm run check:cron` 看排程還在不在；不在就重新部署。
 2. Workers Logs 篩 `scheduled` invocation：
    - 完全沒有 `scheduled` ⇒ Cloudflare 根本沒觸發（排程掉了，或該次沒被排到）。
-   - 有 `scheduled` 但報錯 ⇒ 是快照流程本身壞了，錯誤訊息在 log 裡。
-3. 補資料一律打 HTTP 端點，不要用本機 `npm run snapshot`：
+     Cron Triggers 是盡力而為，官方不保證準時或必定執行——2026-09-11 就發生過。
+   - 有 `scheduled` 但報錯 ⇒ 快照流程本身壞了，錯誤訊息在 log 裡。
+   - 看到 `補課達單次上限` ⇒ 落後超過 3 個交易日，cron 每次只會往前推 3 天。
+     要立刻追上就跑下面的手動補法。
+3. 手動補資料一律打 HTTP 端點，不要用本機 `npm run snapshot`：
    只有 `/api/cron/snapshot` 會在生成後 `revalidateTag('pools')`，
-   本機 script 直接寫 D1，Worker 的卡池快取不會失效，前台仍會讀到舊快照直到 TTL 到期。
-   端點本身冪等，重跑同一個交易日不會重複計。
+   本機 script 直接寫 D1，Worker 的卡池快取不會失效，前台仍會讀到舊快照直到 TTL 到期
+   （`CACHE_TTL_SECONDS` 目前是 600 秒）。端點本身冪等，重跑同一個交易日不會重複計。
+4. 落後很多天（超過 cron 單次上限）時走本機腳本比較快：
+   `npm run backfill -- --days N` 再 `npm run snapshot`，跑完等 10 分鐘快取過期。
 
 ## API
 
