@@ -1,4 +1,5 @@
 import { loadEnv } from "../lib/db/env";
+import { argOf, hasFlag } from "../lib/cli/args";
 
 loadEnv();
 
@@ -9,9 +10,13 @@ async function main() {
     "../lib/pool/generate"
   );
 
-  const dateIdx = process.argv.indexOf("--date");
-  const date =
-    dateIdx !== -1 ? process.argv[dateIdx + 1] : await latestTradingDate();
+  // 帶了 --date 卻沒給值就直接報錯，不要無聲改用最近交易日：
+  // 使用者明確指定了日期，靜默換一個日期會讓人以為快照生成在自己指定的那天。
+  const dateArg = argOf("--date");
+  if (hasFlag("--date") && !dateArg) {
+    throw new Error("--date 需要一個日期，格式 YYYY-MM-DD");
+  }
+  const date = dateArg ?? (await latestTradingDate());
   if (!date) throw new Error("無可用交易日資料，請先執行 backfill");
 
   try {

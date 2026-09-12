@@ -1,4 +1,5 @@
 import { loadEnv } from "../lib/db/env";
+import { hasFlag, numberArg } from "../lib/cli/args";
 import { fetchDailyClose } from "../lib/ingest/twse";
 import { storeDailyCloses, recomputeChange1d } from "../lib/ingest/store";
 
@@ -14,10 +15,8 @@ loadEnv();
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
 
 async function main() {
-  const daysArgIdx = process.argv.indexOf("--days");
-  const days =
-    daysArgIdx !== -1 ? Number(process.argv[daysArgIdx + 1]) || 60 : 60;
-  const force = process.argv.includes("--force");
+  const days = numberArg("--days", 60);
+  const force = hasFlag("--force");
 
   console.log(`回填 ${days} 個日曆天`);
 
