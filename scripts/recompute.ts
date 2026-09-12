@@ -1,4 +1,5 @@
 import { loadEnv } from "../lib/db/env";
+import { argOf } from "../lib/cli/args";
 
 loadEnv();
 
@@ -11,11 +12,6 @@ loadEnv();
 // 每日 cron 只會重算「當日」那一天（見 lib/ingest/store.ts）。
 // 需要回頭修正歷史資料時才跑這支——它的寫入量與指定區間成正比，
 // 全表重算約等於「檔數 × 交易日數」列，請留意 D1 的每日寫入配額。
-function argOf(name: string): string | undefined {
-  const i = process.argv.indexOf(name);
-  return i !== -1 ? process.argv[i + 1] : undefined;
-}
-
 const DATE_RE = /^\d{4}-\d{2}-\d{2}$/;
 
 async function main() {
